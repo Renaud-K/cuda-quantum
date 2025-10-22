@@ -2268,6 +2268,15 @@ bool QuakeBridgeVisitor::VisitCallExpr(clang::CallExpr *x) {
       return pushValue(devCall.getResult(0));
     }
 
+    if (funcName == "bool") {
+    }
+    if (isa<clang::CXXMemberCallExpr>(x)) {
+      llvm::errs() << "CXXMemberCallExpr!!! \n";
+    }
+    if (auto anotherCast = dyn_cast<clang::ImplicitCastExpr>(x)) {
+      llvm::errs() << "ImplicitCastExpr!!! \n";
+      return VisitImplicitCastExpr(anotherCast);
+    }
     // Finally, flag the call as an error except anything in cudaq::solvers or
     // cudaq::qec.
     if (!isInNamespace(func, "solvers") && !isInNamespace(func, "qec")) {

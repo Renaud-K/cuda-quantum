@@ -38,7 +38,7 @@ extern "C" {
 bool __nvqpp__MeasureResultBoolConversion(int);
 }
 
-#ifdef CUDAQ_LIBRARY_MODE
+#if 1
 
 /// In library mode, we model the return type of a qubit measurement result via
 /// the measure_result type. This allows us to keep track of when the result is
