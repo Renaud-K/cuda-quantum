@@ -17,6 +17,7 @@ struct testBoolLiteral {
     h(q);    
     bool bit = false;
     bit = mz(q);
+    return static_cast<bool>(bit);
     return bit;
   }
 };

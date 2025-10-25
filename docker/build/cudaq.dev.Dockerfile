@@ -41,6 +41,9 @@ RUN if [ -n "$mpi" ]; \
 		fi \
     fi
 
+RUN apt update
+RUN apt install -y vim
+
 # Configuring a base image that contains the necessary dependencies for GPU
 # accelerated components and passing a build argument 
 #   install="CMAKE_BUILD_TYPE=Release CUDA_QUANTUM_VERSION=latest"
