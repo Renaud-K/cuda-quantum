@@ -150,7 +150,14 @@ std::string getKernelName(QuantumKernel &kernel) {
     kernel_name = kernel.name();
   } else {
 #ifndef CUDAQ_RTTI_DISABLED
+#if 0
+    static_assert(
+        has_name<QuantumKernel>::value,
+        "Could not deduce kernel name. Ensure RTTI is enabled or use "
+        "cudaq::getKernelName(kernel) overload that takes kernel by "
+        "universal reference.");
     kernel_name = __internal__::demangle_kernel(typeid(kernel).name());
+#endif
 #endif
   }
   return kernel_name;

@@ -10,7 +10,7 @@
 
 #include "cudaq/platform.h"
 #include "cudaq/qis/pauli_word.h"
-#include "cudaq/utils/registry.h"
+#include "common/DeviceCodeRegistry.h"
 #include <cstdint>
 #include <cstring>
 #include <string>

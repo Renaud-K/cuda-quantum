@@ -18,7 +18,7 @@
 #include "cudaq/qis/qkernel.h"
 #include "cudaq/qis/remote_state.h"
 #include "cudaq/qis/state.h"
-#include "cudaq/utils/registry.h"
+#include "common/DeviceCodeRegistry.h"
 #include <complex>
 #include <vector>
 
