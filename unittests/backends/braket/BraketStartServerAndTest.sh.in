@@ -49,7 +49,7 @@ while ! checkServerConnection; do
   fi
 done
 # Run the tests
-./test_braket
+./$1
 # Did they fail? 
 testsPassed=$?
 # kill the server

@@ -10,5 +10,11 @@ add_backend_unittest_executable(test_braket
   SOURCES BraketTester.cpp
   BACKEND braket)
 
+add_backend_unittest_executable(test_braket_emulation 
+  SOURCES BraketEmulationTester.cpp 
+  BACKEND braket
+  )
+
 configure_file("BraketStartServerAndTest.sh.in" "${CMAKE_BINARY_DIR}/unittests/backends/braket/BraketStartServerAndTest.sh" @ONLY)
-add_test(NAME braket-tests COMMAND bash BraketStartServerAndTest.sh WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/unittests/backends/braket/)
+add_test(NAME braket-tests COMMAND bash BraketStartServerAndTest.sh test_braket WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/unittests/backends/braket/)
+add_test(NAME braket-emulation-tests COMMAND bash BraketStartServerAndTest.sh test_braket_emulation WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/unittests/backends/braket/)

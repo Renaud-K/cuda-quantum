@@ -25,9 +25,12 @@ set_property(DIRECTORY PROPERTY BACKEND_UNITTEST_LIBS ${default_backend_unittest
 # Helper function to create an executable to be used by the gtest unit tests
 # - target: positional argument, name of the executable
 # - BACKEND: named argument to specify a prefix for the test names
+# - BACKEND_CONFIG: if present, the test will link with backendConfig.cpp and 
+#                   set NVQPP_TARGET_BACKEND_CONFIG with this value so the 
+#                   backend gets loaded by a constructor before entering main
 # - LINK_LIBS: optional argument to provide non-default list of libraries to link with 
 function(add_backend_unittest_executable target)
-  set(singleValues BACKEND)
+  set(singleValues BACKEND BACKEND_CONFIG)
   set(multiValues SOURCES INCLUDES LINK_LIBS)
   cmake_parse_arguments(ARG "" "${singleValues}" "${multiValues}" ${ARGN})
 
@@ -50,6 +53,13 @@ function(add_backend_unittest_executable target)
     set(libs ${ARG_LINK_LIBS})
   else()
     set(libs ${default_backend_unittest_libs})
+  endif()
+
+  if(ARG_BACKEND_CONFIG)
+    string(REPLACE [[=]] [[\\;]] ARG_BACKEND_CONFIG "${ARG_BACKEND_CONFIG}")
+    string(REPLACE [[ ]] [[\\;]] ARG_BACKEND_CONFIG "${ARG_BACKEND_CONFIG}")
+    target_sources(${target} PRIVATE ${CMAKE_BINARY_DIR}/targets/backendConfig.cpp)
+    target_compile_definitions(${target} PRIVATE NVQPP_TARGET_BACKEND_CONFIG="${ARG_BACKEND_CONFIG}")
   endif()
 
   target_link_libraries(${target} PRIVATE ${libs})

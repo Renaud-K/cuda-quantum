@@ -33,7 +33,7 @@ while ! checkServerConnection; do
   fi
 done
 # Run the tests (gtest-based, not using nvq++)
-./test_quantinuum
+./$1
 # Did they fail? 
 testsPassed=$?
 

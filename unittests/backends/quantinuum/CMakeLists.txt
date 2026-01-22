@@ -11,8 +11,14 @@ add_backend_unittest_executable(test_quantinuum
   BACKEND quantinuum
   )
 
+add_backend_unittest_executable(test_quantinuum_emulation 
+  SOURCES QuantinuumEmulationTester.cpp 
+  BACKEND quantinuum
+  )
+
 configure_file("QuantinuumStartServerAndTest.sh.in" "${CMAKE_BINARY_DIR}/unittests/backends/quantinuum/QuantinuumStartServerAndTest.sh" @ONLY)
-add_test(NAME quantinuum-tests COMMAND bash QuantinuumStartServerAndTest.sh WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/unittests/backends/quantinuum/)
+add_test(NAME quantinuum-tests COMMAND bash QuantinuumStartServerAndTest.sh test_quantinuum WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/unittests/backends/quantinuum/)
+add_test(NAME quantinuum-emulation-tests COMMAND bash QuantinuumStartServerAndTest.sh test_quantinuum_emulation WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/unittests/backends/quantinuum/)
 
 # Test for Nexus helper functions
 add_backend_unittest_executable(test_quantinuum_util 

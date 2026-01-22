@@ -11,7 +11,6 @@
 #include "cudaq/algorithm.h"
 #include <fstream>
 #include <gtest/gtest.h>
-#include <regex>
 
 std::string mockPort = "62440";
 std::string backendStringTemplate =
@@ -42,29 +41,6 @@ CUDAQ_TEST(QuantinuumTester, checkSampleSync) {
   EXPECT_EQ(counts.size(), 2);
 }
 
-CUDAQ_TEST(QuantinuumTester, checkSampleSyncEmulate) {
-  std::string home = std::getenv("HOME");
-  std::string fileName = home + "/FakeCppQuantinuum.config";
-  auto backendString =
-      fmt::format(fmt::runtime(backendStringTemplate), mockPort, fileName);
-  backendString =
-      std::regex_replace(backendString, std::regex("false"), "true");
-
-  auto &platform = cudaq::get_platform();
-  platform.setTargetBackend(backendString);
-
-  auto kernel = cudaq::make_kernel();
-  auto qubit = kernel.qalloc(2);
-  kernel.h(qubit[0]);
-  kernel.x<cudaq::ctrl>(qubit[0], qubit[1]);
-  kernel.mz(qubit[0]);
-  kernel.mz(qubit[1]);
-
-  auto counts = cudaq::sample(kernel);
-  counts.dump();
-  EXPECT_EQ(counts.size(), 2);
-}
-
 CUDAQ_TEST(QuantinuumTester, checkSampleAsync) {
   std::string home = std::getenv("HOME");
   std::string fileName = home + "/FakeCppQuantinuum.config";
@@ -81,28 +57,6 @@ CUDAQ_TEST(QuantinuumTester, checkSampleAsync) {
 
   auto future = cudaq::sample_async(kernel);
   auto counts = future.get();
-  EXPECT_EQ(counts.size(), 2);
-}
-
-CUDAQ_TEST(QuantinuumTester, checkSampleAsyncEmulate) {
-  std::string home = std::getenv("HOME");
-  std::string fileName = home + "/FakeCppQuantinuum.config";
-  auto backendString =
-      fmt::format(fmt::runtime(backendStringTemplate), mockPort, fileName);
-  backendString =
-      std::regex_replace(backendString, std::regex("false"), "true");
-
-  auto &platform = cudaq::get_platform();
-  platform.setTargetBackend(backendString);
-
-  auto kernel = cudaq::make_kernel();
-  auto qubit = kernel.qalloc(2);
-  kernel.h(qubit[0]);
-  kernel.mz(qubit[0]);
-
-  auto future = cudaq::sample_async(kernel);
-  auto counts = future.get();
-  counts.dump();
   EXPECT_EQ(counts.size(), 2);
 }
 
@@ -167,34 +121,6 @@ CUDAQ_TEST(QuantinuumTester, checkObserveSync) {
   EXPECT_TRUE(isValidExpVal(result.expectation()));
 }
 
-CUDAQ_TEST(QuantinuumTester, checkObserveSyncEmulate) {
-  std::string home = std::getenv("HOME");
-  std::string fileName = home + "/FakeCppQuantinuum.config";
-  auto backendString =
-      fmt::format(fmt::runtime(backendStringTemplate), mockPort, fileName);
-  backendString =
-      std::regex_replace(backendString, std::regex("false"), "true");
-
-  auto &platform = cudaq::get_platform();
-  platform.setTargetBackend(backendString);
-
-  auto [kernel, theta] = cudaq::make_kernel<double>();
-  auto qubit = kernel.qalloc(2);
-  kernel.x(qubit[0]);
-  kernel.ry(theta, qubit[1]);
-  kernel.x<cudaq::ctrl>(qubit[1], qubit[0]);
-
-  cudaq::spin_op h =
-      5.907 - 2.1433 * cudaq::spin_op::x(0) * cudaq::spin_op::x(1) -
-      2.1433 * cudaq::spin_op::y(0) * cudaq::spin_op::y(1) +
-      .21829 * cudaq::spin_op::z(0) - 6.125 * cudaq::spin_op::z(1);
-  auto result = cudaq::observe(100000, kernel, h, .59);
-  result.dump();
-
-  printf("ENERGY: %lf\n", result.expectation());
-  EXPECT_TRUE(isValidExpVal(result.expectation()));
-}
-
 CUDAQ_TEST(QuantinuumTester, checkObserveAsync) {
   std::string home = std::getenv("HOME");
   std::string fileName = home + "/FakeCppQuantinuum.config";
@@ -215,36 +141,6 @@ CUDAQ_TEST(QuantinuumTester, checkObserveAsync) {
       2.1433 * cudaq::spin_op::y(0) * cudaq::spin_op::y(1) +
       .21829 * cudaq::spin_op::z(0) - 6.125 * cudaq::spin_op::z(1);
   auto future = cudaq::observe_async(kernel, h, .59);
-
-  auto result = future.get();
-  result.dump();
-
-  printf("ENERGY: %lf\n", result.expectation());
-  EXPECT_TRUE(isValidExpVal(result.expectation()));
-}
-
-CUDAQ_TEST(QuantinuumTester, checkObserveAsyncEmulate) {
-  std::string home = std::getenv("HOME");
-  std::string fileName = home + "/FakeCppQuantinuum.config";
-  auto backendString =
-      fmt::format(fmt::runtime(backendStringTemplate), mockPort, fileName);
-  backendString =
-      std::regex_replace(backendString, std::regex("false"), "true");
-
-  auto &platform = cudaq::get_platform();
-  platform.setTargetBackend(backendString);
-
-  auto [kernel, theta] = cudaq::make_kernel<double>();
-  auto qubit = kernel.qalloc(2);
-  kernel.x(qubit[0]);
-  kernel.ry(theta, qubit[1]);
-  kernel.x<cudaq::ctrl>(qubit[1], qubit[0]);
-
-  cudaq::spin_op h =
-      5.907 - 2.1433 * cudaq::spin_op::x(0) * cudaq::spin_op::x(1) -
-      2.1433 * cudaq::spin_op::y(0) * cudaq::spin_op::y(1) +
-      .21829 * cudaq::spin_op::z(0) - 6.125 * cudaq::spin_op::z(1);
-  auto future = cudaq::observe_async(100000, 0, kernel, h, .59);
 
   auto result = future.get();
   result.dump();
