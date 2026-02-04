@@ -24,6 +24,7 @@ pybind11_add_module(cudaq_test_cpp_algo
 target_link_libraries(cudaq_test_cpp_algo
   PRIVATE
     cudaq
+    cudaq-logger
     quantum_lib
     cudaq-python-interop
 )

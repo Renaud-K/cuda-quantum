@@ -12,6 +12,7 @@ add_library(cudaq-serverhelper-horizon SHARED HorizonServerHelper.cpp )
 target_link_libraries(cudaq-serverhelper-horizon
   PUBLIC 
     cudaq-common 
+    cudaq-logger
     fmt::fmt-header-only 
 )
 set_target_properties(cudaq-serverhelper-horizon
@@ -24,7 +25,7 @@ install(TARGETS cudaq-serverhelper-horizon DESTINATION lib)
 add_library(sunrise-provider SHARED ProviderLib.cpp)
 target_link_libraries(sunrise-provider
   PUBLIC 
-    cudaq-common 
+    cudaq-common
     fmt::fmt-header-only 
 )
 

@@ -11,6 +11,7 @@ set(default_backend_unittest_libs
   fmt::fmt-header-only 
   cudaq-common 
   cudaq
+  cudaq-logger
   cudaq-builder
   cudaq-mlir-runtime
   cudaq-rest-qpu

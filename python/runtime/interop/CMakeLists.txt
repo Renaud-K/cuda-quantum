@@ -12,7 +12,7 @@ target_include_directories(cudaq-python-interop PRIVATE
     ${PYTHON_INCLUDE_DIRS}
     ${pybind11_INCLUDE_DIRS}
 )
-target_link_libraries(cudaq-python-interop PRIVATE pybind11::module cudaq)
+target_link_libraries(cudaq-python-interop PRIVATE pybind11::module cudaq cudaq-logger)
 install (FILES PythonCppInterop.h DESTINATION include/cudaq/python/)
 
 install(TARGETS cudaq-python-interop EXPORT cudaq-python-interop-targets DESTINATION lib)

@@ -162,6 +162,7 @@ if (CUSTATEVEC_ROOT AND CUDA_FOUND)
   target_link_libraries(test_mqpu
     PRIVATE
     cudaq
+    cudaq-logger
     cudaq-builder
     cudaq-platform-mqpu
     nvqir-custatevec-fp64
@@ -206,6 +207,7 @@ if (CUSTATEVEC_ROOT AND CUDA_FOUND)
         target_link_libraries(test_mpi
             PRIVATE
             cudaq
+            cudaq-logger
             cudaq-platform-mqpu
             nvqir-custatevec-fp32
             gtest_main)
@@ -226,6 +228,7 @@ if (CUSTATEVEC_ROOT AND CUDA_FOUND)
     target_link_libraries(test_gpu_get_state
       PRIVATE
       cudaq
+      cudaq-logger
       cudaq-builder
       cudaq-platform-mqpu
       nvqir-custatevec-fp64
@@ -395,6 +398,7 @@ if (CUDA_FOUND)
    PRIVATE
    cudaq-operator
    cudaq
+   cudaq-logger
    cudaq-platform-mqpu
    nvqir-dynamics
    ${CUDENSITYMAT_ROOT}/lib/libcudensitymat.so.0
@@ -424,6 +428,7 @@ if (CUDA_FOUND)
           PRIVATE
           cudaq-operator
           cudaq
+          cudaq-logger
           cudaq-platform-mqpu
           nvqir-dynamics
           ${CUDENSITYMAT_ROOT}/lib/libcudensitymat.so.0

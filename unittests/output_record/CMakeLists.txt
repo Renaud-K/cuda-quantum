@@ -16,7 +16,6 @@ target_link_libraries(test_record
   PRIVATE
     cudaq
     cudaq-common
-    cudaq-logger
     gtest_main
     cudaq-platform-default)
 
