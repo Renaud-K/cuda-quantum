@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include "common/ArgumentConversion.h"
+#include "compiler/ArgumentConversion.h"
 #include "common/Environment.h"
 #include "common/JsonConvert.h"
 #include "common/RemoteKernelExecutor.h"
 #include "common/RestClient.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 #include "common/UnzipUtils.h"
 #include "cudaq.h"
 #include "cudaq/Frontend/nvqpp/AttributeNames.h"

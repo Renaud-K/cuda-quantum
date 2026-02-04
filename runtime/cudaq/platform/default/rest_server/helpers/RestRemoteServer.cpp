@@ -7,11 +7,11 @@
  ******************************************************************************/
 
 #include "common/FmtCore.h"
-#include "common/JIT.h"
+#include "compiler/JIT.h"
 #include "common/JsonConvert.h"
 #include "common/PluginUtils.h"
 #include "common/RemoteKernelExecutor.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 #include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CodeGen/Passes.h"

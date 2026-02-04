@@ -10,6 +10,7 @@
 
 #include "common/CodeGenConfig.h"
 #include "common/ExecutionContext.h"
+#include "cudaq/runtime/logger/logger.h"
 #include "common/NoiseModel.h"
 #include "common/ObserveResult.h"
 #include "common/ThunkInterface.h"

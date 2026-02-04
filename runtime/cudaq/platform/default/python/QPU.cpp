@@ -7,10 +7,10 @@
  ******************************************************************************/
 
 #include "QPU.h"
-#include "common/ArgumentConversion.h"
+#include "compiler/ArgumentConversion.h"
 #include "common/Environment.h"
 #include "common/ExecutionContext.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 #include "cudaq/Optimizer/Builder/Intrinsics.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CodeGen/OpenQASMEmitter.h"

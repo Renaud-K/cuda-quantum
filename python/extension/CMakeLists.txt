@@ -82,11 +82,11 @@ declare_mlir_python_extension(CUDAQuantumPythonSources.Extension
     ../runtime/utils/PyRemoteSimulatorQPU.cpp
     ../runtime/utils/PyRestRemoteClient.cpp
     ../utils/LinkedLibraryHolder.cpp
-    ../../runtime/common/ArgumentConversion.cpp
-    ../../runtime/common/CodeGenConfig.cpp
-    ../../runtime/common/RunTheKernel.cpp
-    ../../runtime/common/RuntimeMLIR.cpp
-    ../../runtime/common/RuntimePyMLIR.cpp
+    ../../runtime/compiler/ArgumentConversion.cpp
+    ../../runtime/compiler/CodeGenConfig.cpp
+    ../../runtime/compiler/RunTheKernel.cpp
+    ../../runtime/compiler/RuntimeMLIR.cpp
+    ../../runtime/compiler/RuntimePyMLIR.cpp
     ../../runtime/cudaq/platform/default/rest_server/RemoteRuntimeClient.cpp
     ../../runtime/cudaq/platform/orca/OrcaExecutor.cpp
     ../../runtime/cudaq/platform/orca/OrcaQPU.cpp
@@ -115,6 +115,7 @@ target_include_directories(CUDAQuantumPythonSources.Extension INTERFACE
     ${CMAKE_SOURCE_DIR}/python 
     ${CMAKE_SOURCE_DIR}/python/utils
     ${CMAKE_SOURCE_DIR}/runtime
+    ${CMAKE_SOURCE_DIR}/runtime/compiler
 )
 target_link_libraries(CUDAQuantumPythonSources.Extension INTERFACE 
     cudaq 

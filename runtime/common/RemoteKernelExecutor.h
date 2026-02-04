@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/Registry.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 #include "cudaq/remote_capabilities.h"
 #include <optional>
 #include <string_view>

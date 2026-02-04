@@ -7,7 +7,7 @@
  ******************************************************************************/
 
 #include "ArgumentConversion.h"
-#include "ArgumentWrapper.h"
+#include "common/ArgumentWrapper.h"
 #include "common/DeviceCodeRegistry.h"
 #include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Intrinsics.h"

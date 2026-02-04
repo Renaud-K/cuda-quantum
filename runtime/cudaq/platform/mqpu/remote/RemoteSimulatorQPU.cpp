@@ -7,7 +7,7 @@
  ******************************************************************************/
 
 #include "common/BaseRemoteSimulatorQPU.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 
 using namespace mlir;
 

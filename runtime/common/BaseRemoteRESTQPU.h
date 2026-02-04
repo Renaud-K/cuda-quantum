@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "common/ArgumentConversion.h"
+#include "compiler/ArgumentConversion.h"
 #include "common/CodeGenConfig.h"
 #include "common/Environment.h"
 #include "common/ExecutionContext.h"
@@ -17,7 +17,7 @@
 #include "common/FmtCore.h"
 #include "common/Resources.h"
 #include "common/RestClient.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 #include "cudaq.h"
 #include "cudaq/Frontend/nvqpp/AttributeNames.h"
 #include "cudaq/Optimizer/Builder/Intrinsics.h"

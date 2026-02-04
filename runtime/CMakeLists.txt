@@ -13,6 +13,7 @@ add_subdirectory(common)
 add_subdirectory(nvqir)
 add_subdirectory(cudaq)
 add_subdirectory(test)
+add_subdirectory(compiler)
 
 # Install
 # ==============================================================================

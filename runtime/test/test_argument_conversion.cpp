@@ -11,7 +11,7 @@
 
 // RUN: test_argument_conversion | FileCheck %s
 
-#include "common/ArgumentConversion.h"
+#include "compiler/ArgumentConversion.h"
 #include "cudaq/Optimizer/Dialect/CC/CCDialect.h"
 #include "cudaq/Optimizer/Dialect/Quake/QuakeDialect.h"
 #include "cudaq/Optimizer/InitAllDialects.h"

@@ -8,11 +8,11 @@
 
 #pragma once
 
-#include "common/ArgumentConversion.h"
+#include "compiler/ArgumentConversion.h"
 #include "common/ExecutionContext.h"
 #include "common/RemoteKernelExecutor.h"
 #include "common/Resources.h"
-#include "common/RuntimeMLIR.h"
+#include "compiler/RuntimeMLIR.h"
 #include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/Transforms/Passes.h"

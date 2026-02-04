@@ -9,7 +9,7 @@
 #include "py_alt_launch_kernel.h"
 #include "JITExecutionCache.h"
 #include "common/AnalogHamiltonian.h"
-#include "common/ArgumentConversion.h"
+#include "compiler/ArgumentConversion.h"
 #include "common/ArgumentWrapper.h"
 #include "common/Environment.h"
 #include "cudaq/Optimizer/Builder/Marshal.h"
