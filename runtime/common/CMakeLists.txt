@@ -152,6 +152,8 @@ target_link_libraries(cudaq-mlir-runtime
     MLIRLLVMToLLVMIRTranslation
     cudaq-common
     cudaq-qir-verifier
+    MLIRFuncInlinerExtension
+    MLIRLLVMIRTransforms
     CUDAQTargetConfigUtil
     cudaq-logger
 )
