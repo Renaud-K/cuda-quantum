@@ -7,6 +7,10 @@
 # ============================================================================ #
 
 include(HandleLLVMOptions)
+include_directories(SYSTEM
+  ${LLVM_INCLUDE_DIRS}
+  ${MLIR_INCLUDE_DIRS})
+
 if (NOT CUDAQ_DISABLE_CPP_FRONTEND)
   add_subdirectory(Frontend)
 endif()

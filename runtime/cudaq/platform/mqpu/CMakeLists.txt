@@ -27,6 +27,7 @@ target_link_libraries(${LIBRARY_NAME}
     cudaq-em-default
     cudaq-operator
   PRIVATE
+    llvm-support-headers
     cudaq-common
     cudaq-logger
     fmt::fmt-header-only

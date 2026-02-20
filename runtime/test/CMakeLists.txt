@@ -25,6 +25,8 @@ target_link_libraries(${TEST_NAME}
   PUBLIC
     cudaq-mlir-runtime
     cudaq
-    cudaq-platform-default)
+    cudaq-platform-default
+  PRIVATE
+    mlir-support-headers)
 
 set_property(TARGET ${TEST_NAME} PROPERTY FOLDER test)

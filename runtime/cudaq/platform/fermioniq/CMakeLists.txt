@@ -27,6 +27,7 @@ target_link_libraries(${LIBRARY_NAME}
     cudaq 
     cudaq-platform-default
     nvqir
+    llvm-support-headers
 )
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION lib)

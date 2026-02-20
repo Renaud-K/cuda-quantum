@@ -7,6 +7,27 @@
 # ============================================================================ #
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+#include_directories(SYSTEM
+#  ${LLVM_INCLUDE_DIRS}
+#  ${MLIR_INCLUDE_DIRS})
+
+add_library(llvm-support-headers INTERFACE)
+target_include_directories(llvm-support-headers
+  SYSTEM
+  INTERFACE
+    ${LLVM_INCLUDE_DIRS}
+)
+
+add_library(mlir-support-headers INTERFACE)
+target_include_directories(mlir-support-headers
+  SYSTEM
+  INTERFACE
+    ${MLIR_INCLUDE_DIRS}
+)
+target_link_libraries(mlir-support-headers
+  INTERFACE
+    llvm-support-headers
+)
 
 add_subdirectory(logger)
 add_subdirectory(common)

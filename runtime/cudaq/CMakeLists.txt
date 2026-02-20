@@ -38,12 +38,13 @@ if (CUDA_FOUND)
   find_package(CUDAToolkit REQUIRED)
 
   target_include_directories(${LIBRARY_NAME}
-    PUBLIC $<INSTALL_INTERFACE:include>
+    PUBLIC  $<INSTALL_INTERFACE:include>
             $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/runtime>
             $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/tpls/eigen>
             $<BUILD_INTERFACE:${CUDAToolkit_INCLUDE_DIRS}>
-    PRIVATE .)
-
+    PRIVATE .
+            $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>
+  )
   target_link_libraries(${LIBRARY_NAME}
     PUBLIC
       dl
@@ -63,10 +64,12 @@ if (CUDA_FOUND)
   target_compile_definitions(${LIBRARY_NAME} PRIVATE CUDAQ_HAS_CUDA)
 else()
   target_include_directories(${LIBRARY_NAME}
-    PUBLIC $<INSTALL_INTERFACE:include>
+    PUBLIC  $<INSTALL_INTERFACE:include>
             $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/runtime>
             $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/tpls/eigen>
-    PRIVATE .)
+    PRIVATE .
+            $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>
+    )
 
   target_link_libraries(${LIBRARY_NAME}
     PUBLIC

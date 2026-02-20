@@ -13,6 +13,8 @@ target_link_libraries(cudaq-serverhelper-ionq
   PUBLIC 
     cudaq-common 
     cudaq-logger 
+  PRIVATE
+    llvm-support-headers
 )
 install(TARGETS cudaq-serverhelper-ionq DESTINATION lib)
 

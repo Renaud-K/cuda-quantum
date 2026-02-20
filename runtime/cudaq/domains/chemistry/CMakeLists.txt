@@ -12,7 +12,7 @@ set (CHEMISTRY_DEPENDENCIES "")
 list(APPEND CHEMISTRY_DEPENDENCIES cudaq-operator)
 add_openmp_configurations(cudaq-chemistry CHEMISTRY_DEPENDENCIES)
 
-target_link_libraries(cudaq-chemistry PRIVATE ${CHEMISTRY_DEPENDENCIES})
+target_link_libraries(cudaq-chemistry PRIVATE llvm-support-headers ${CHEMISTRY_DEPENDENCIES})
 target_include_directories(cudaq-chemistry SYSTEM
    PRIVATE 
      ${CMAKE_SOURCE_DIR}/tpls/xtl/include 

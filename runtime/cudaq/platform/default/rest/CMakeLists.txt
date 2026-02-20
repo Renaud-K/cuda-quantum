@@ -34,6 +34,7 @@ target_link_libraries(cudaq-rest-qpu
     fmt::fmt-header-only
     cudaq
     cudaq-platform-default
+    llvm-support-headers
     nvqir
     ${AWSSDK_LINK_LIBRARIES})
 

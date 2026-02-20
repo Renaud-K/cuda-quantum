@@ -45,6 +45,7 @@ target_link_libraries(${LIBRARY_NAME}
   PUBLIC
     cudaq-operator
   PRIVATE
+    llvm-support-headers
     cudaq-logger
     fmt::fmt-header-only
 )
@@ -107,22 +108,13 @@ endif()
 add_library(cudaq-mlir-runtime
   SHARED
     ArgumentConversion.cpp
-    CodeGenConfig.cpp
     Compiler.cpp
-    Environment.cpp
     JIT.cpp
     RuntimeMLIR.cpp
     RuntimeCppMLIR.cpp
     LayoutInfo.cpp
 )
 set_property(GLOBAL APPEND PROPERTY CUDAQ_RUNTIME_LIBS cudaq-mlir-runtime)
-
-set_source_files_properties(
-  CodeGenConfig.cpp
-  Environment.cpp
-  JIT.cpp
-  RuntimeMLIR.cpp
-)
 
 target_include_directories(cudaq-mlir-runtime
   PRIVATE .

@@ -7,7 +7,10 @@
 # ============================================================================ #
 
 include(HandleLLVMOptions)
-
+include_directories(SYSTEM
+  ${LLVM_INCLUDE_DIRS}
+  ${MLIR_INCLUDE_DIRS})
+  
 add_executable(OptimizerUnitTests
   HermitianTrait.cpp
   FactoryMergeModuleTest.cpp

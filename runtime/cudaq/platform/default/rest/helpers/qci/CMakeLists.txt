@@ -14,6 +14,8 @@ target_link_libraries(cudaq-serverhelper-qci
   PUBLIC 
     cudaq-logger
     cudaq-common 
+  PRIVATE
+    llvm-support-headers
 )
 install(TARGETS cudaq-serverhelper-qci DESTINATION lib)
 

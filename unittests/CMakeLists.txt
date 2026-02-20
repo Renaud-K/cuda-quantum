@@ -13,6 +13,10 @@ set (CMAKE_CXX_FLAGS
 SET(CMAKE_EXE_LINKER_FLAGS "")
 SET(CMAKE_SHARED_LINKER_FLAGS "")
 
+include_directories(SYSTEM
+  ${LLVM_INCLUDE_DIRS}
+  ${MLIR_INCLUDE_DIRS})
+  
 set(CUDAQ_RUNTIME_TEST_SOURCES
   # Integration tests
   integration/adjoint_tester.cpp
@@ -501,7 +505,9 @@ target_link_libraries(test_exec_ctx_thread
   PRIVATE
   cudaq
   cudaq-platform-default
-  gtest_main)
+  gtest_main
+  llvm-support-headers
+)
 gtest_discover_tests(test_exec_ctx_thread)
 
 # Create an executable for MPI UnitTests

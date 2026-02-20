@@ -17,6 +17,7 @@ target_include_directories(cudaq-builder PUBLIC
           $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/runtime>)
 target_link_libraries(cudaq-builder
   PRIVATE
+    mlir-support-headers
     cudaq
     cudaq-logger
     fmt::fmt-header-only

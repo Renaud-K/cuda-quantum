@@ -8,9 +8,12 @@
 enable_language(CUDA)
 find_package(CUDAToolkit REQUIRED)
 add_library(gpu-emulated-qpu OBJECT GPUEmulatedQPU.cpp)
-target_link_libraries(gpu-emulated-qpu PUBLIC 
-                        cudaq-common 
-                        CUDA::cudart_static
-                        cudaq-logger 
+target_link_libraries(gpu-emulated-qpu 
+  PUBLIC 
+    cudaq-common 
+    CUDA::cudart_static
+    cudaq-logger 
+  PRIVATE
+    llvm-support-headers
 )
 target_include_directories(gpu-emulated-qpu PRIVATE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/runtime>)

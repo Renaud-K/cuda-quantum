@@ -15,6 +15,8 @@ target_link_libraries(cudaq-serverhelper-anyon
   PUBLIC 
     cudaq-common 
     cudaq-logger
+  PRIVATE
+    llvm-support-headers
 )
 install(TARGETS cudaq-serverhelper-anyon DESTINATION lib)
 

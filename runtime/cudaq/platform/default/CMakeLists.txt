@@ -20,7 +20,9 @@ target_include_directories(${LIBRARY_NAME}
     PUBLIC 
        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/runtime>
        $<INSTALL_INTERFACE:include>
-    PRIVATE . ../../)
+    PRIVATE . ../../
+       $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>
+)
 
 target_link_libraries(${LIBRARY_NAME}
   PUBLIC

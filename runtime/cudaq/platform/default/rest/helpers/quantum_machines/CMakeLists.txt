@@ -13,5 +13,7 @@ target_link_libraries(cudaq-serverhelper-quantum_machines
   PUBLIC
     cudaq-common
     cudaq-logger
+  PRIVATE
+    llvm-support-headers  
 )
 install(TARGETS cudaq-serverhelper-quantum_machines DESTINATION lib)

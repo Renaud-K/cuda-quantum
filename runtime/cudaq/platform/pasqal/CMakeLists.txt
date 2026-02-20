@@ -26,6 +26,7 @@ target_link_libraries(${LIBRARY_NAME}
     cudaq-operator
     cudaq-common 
   PRIVATE
+    llvm-support-headers
     pthread
     cudaq-mlir-runtime 
     fmt::fmt-header-only

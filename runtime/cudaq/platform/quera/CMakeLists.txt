@@ -28,6 +28,7 @@ target_link_libraries(${LIBRARY_NAME}
     cudaq
     cudaq-platform-default
     nvqir
+    llvm-support-headers
 )
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION lib)
@@ -39,6 +40,8 @@ target_link_libraries(cudaq-serverhelper-quera
   PUBLIC 
     cudaq-serverhelper-braket
     cudaq-common 
-    cudaq-logger 
+    cudaq-logger
+  PRIVATE
+    llvm-support-headers
 )
 install(TARGETS cudaq-serverhelper-quera DESTINATION lib)

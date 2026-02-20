@@ -431,10 +431,10 @@ include(AddLLVM)
 include(AddMLIR)
 
 # Add LLVM, Clang and MLIR headers to the include path
-include_directories(SYSTEM
-  ${LLVM_INCLUDE_DIRS}
-  ${CLANG_INCLUDE_DIRS}
-  ${MLIR_INCLUDE_DIRS})
+# include_directories(SYSTEM
+#   ${LLVM_INCLUDE_DIRS}
+#   ${CLANG_INCLUDE_DIRS}
+#   ${MLIR_INCLUDE_DIRS})
 
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
 add_definitions(${LLVM_DEFINITIONS})

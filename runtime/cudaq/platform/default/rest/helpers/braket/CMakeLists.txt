@@ -13,9 +13,12 @@ add_target_config(braket)
 add_library(cudaq-serverhelper-braket SHARED BraketExecutor.cpp BraketServerHelper.cpp)
 
 target_link_libraries(cudaq-serverhelper-braket
+  PUBLIC
     cudaq-common
     cudaq-logger
     fmt::fmt-header-only
-    ${AWSSDK_LINK_LIBRARIES})
+    ${AWSSDK_LINK_LIBRARIES}
+  PRIVATE
+    llvm-support-headers)
 
 install(TARGETS cudaq-serverhelper-braket DESTINATION lib)
