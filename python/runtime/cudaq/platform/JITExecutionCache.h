@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "common/JIT.h"
+#include "cudaq_internal/compiler/JIT.h"
 #include <list>
 #include <mutex>
 #include <unordered_map>
@@ -20,6 +20,8 @@ namespace cudaq {
 /// for the string representation of the original MLIR ModuleOp.
 class JITExecutionCache {
 protected:
+  using JitEngine = cudaq_internal::compiler::JitEngine;
+
   // Implement a Least Recently Used cache based on the JIT hash.
   std::list<std::size_t> lruList;
 

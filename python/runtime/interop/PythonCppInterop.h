@@ -7,8 +7,8 @@
  ******************************************************************************/
 #pragma once
 
-#include "common/JIT.h"
 #include "cudaq/qis/qkernel.h"
+#include "cudaq_internal/compiler/JIT.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include <optional>
 #include <pybind11/pybind11.h>

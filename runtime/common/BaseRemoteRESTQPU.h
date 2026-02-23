@@ -9,12 +9,10 @@
 #pragma once
 
 #include "NoiseModel.h"
-#include "common/Compiler.h"
 #include "common/Environment.h"
 #include "common/ExecutionContext.h"
 #include "common/Executor.h"
 #include "common/ExtraPayloadProvider.h"
-#include "common/JIT.h"
 #include "common/Resources.h"
 #include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
@@ -23,6 +21,8 @@
 #include "cudaq/platform/qpu.h"
 #include "cudaq/platform/quantum_platform.h"
 #include "cudaq/runtime/logger/logger.h"
+#include "cudaq_internal/compiler/Compiler.h"
+#include "cudaq_internal/compiler/JIT.h"
 #include "llvm/Support/Base64.h"
 #include <fstream>
 #include <netinet/in.h>
@@ -39,6 +39,9 @@ bool isUsingResourceCounterSimulator();
 namespace cudaq {
 
 class BaseRemoteRESTQPU : public QPU {
+  using Compiler = cudaq_internal::compiler::Compiler;
+  using JitEngine = cudaq_internal::compiler::JitEngine;
+
 protected:
   /// The number of shots
   std::optional<int> nShots;
@@ -315,7 +318,7 @@ public:
 
   void *specializeModule(const std::string &kernelName, mlir::ModuleOp module,
                          const std::vector<void *> &rawArgs, mlir::Type resTy,
-                         std::optional<cudaq::JitEngine> &cachedEngine,
+                         std::optional<JitEngine> &cachedEngine,
                          bool isEntryPoint) override {
     CUDAQ_INFO("specializing remote rest kernel via module ({})", kernelName);
     throw std::runtime_error(

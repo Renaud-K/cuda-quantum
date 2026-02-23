@@ -5,53 +5,36 @@
  * This source code and the accompanying materials are made available under    *
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
-
 #include "common/FmtCore.h"
-#include "common/JIT.h"
 #include "common/JsonConvert.h"
 #include "common/PluginUtils.h"
 #include "common/RemoteKernelExecutor.h"
-#include "common/RuntimeMLIR.h"
 #include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CodeGen/Passes.h"
-#include "cudaq/Optimizer/Dialect/CC/CCDialect.h"
-#include "cudaq/Optimizer/Dialect/CC/CCOps.h"
-#include "cudaq/Optimizer/Dialect/Quake/QuakeDialect.h"
-#include "cudaq/Optimizer/Dialect/Quake/QuakeOps.h"
-#include "cudaq/Optimizer/Transforms/Passes.h"
 #include "cudaq/runtime/logger/logger.h"
+#include "cudaq_internal/compiler/JIT.h"
+#include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "nvqir/CircuitSimulator.h"
 #include "server_impl/RestServer.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/Base64.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Verifier.h"
-#include "mlir/InitAllDialects.h"
-#include "mlir/InitAllPasses.h"
-#include "mlir/InitAllTranslations.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
-#include "mlir/Tools/mlir-translate/Translation.h"
-#include "mlir/Transforms/Passes.h"
 #include <cxxabi.h>
 #include <filesystem>
-#include <fstream>
-#include <streambuf>
 
 extern "C" {
 void __nvqir__setCircuitSimulator(nvqir::CircuitSimulator *);
@@ -119,6 +102,8 @@ void invokeWrappedKernel(
     });
   }
 }
+
+using namespace cudaq_internal;
 
 class RemoteRestRuntimeServer : public cudaq::RemoteRuntimeServer {
   int m_port = -1;
@@ -211,7 +196,7 @@ public:
 
           return resultJs;
         });
-    m_mlirContext = cudaq::getOwningMLIRContext();
+    m_mlirContext = compiler::getOwningMLIRContext();
     m_hasMpi = cudaq::mpi::is_initialized();
   }
   // Start the server.
@@ -348,7 +333,7 @@ public:
         // In library mode (LLVM), check to see if we have mid-circuit measures
         // by tracing the kernel function.
         cudaq::ExecutionContext context("tracer");
-        std::tie(llvmJit, wrappedKernel) = cudaq::createWrappedKernel(
+        std::tie(llvmJit, wrappedKernel) = compiler::createWrappedKernel(
             ir, std::string(kernelName), kernelArgs, argsSize);
         invokeWrappedKernel(wrappedKernel, context);
         // In trace mode, if we have a measure result
@@ -367,7 +352,7 @@ public:
           // deleted.
           clearRegOpsAndDestroyJIT(llvmJit);
           // If it has conditionals, loop over individual circuit executions
-          std::tie(llvmJit, wrappedKernel) = cudaq::createWrappedKernel(
+          std::tie(llvmJit, wrappedKernel) = compiler::createWrappedKernel(
               ir, std::string(kernelName), kernelArgs, argsSize);
           invokeWrappedKernel(wrappedKernel, io_context, io_context.shots,
                               [&](std::size_t i) {
@@ -383,12 +368,12 @@ public:
           // in an LLVM JIT, we must clear them before any prior LLVM JIT gets
           // deleted.
           clearRegOpsAndDestroyJIT(llvmJit);
-          std::tie(llvmJit, wrappedKernel) = cudaq::createWrappedKernel(
+          std::tie(llvmJit, wrappedKernel) = compiler::createWrappedKernel(
               ir, std::string(kernelName), kernelArgs, argsSize);
           invokeWrappedKernel(wrappedKernel, io_context);
         }
       } else {
-        std::tie(llvmJit, wrappedKernel) = cudaq::createWrappedKernel(
+        std::tie(llvmJit, wrappedKernel) = compiler::createWrappedKernel(
             ir, std::string(kernelName), kernelArgs, argsSize);
         invokeWrappedKernel(wrappedKernel, io_context);
       }

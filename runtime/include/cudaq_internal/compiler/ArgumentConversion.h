@@ -9,15 +9,12 @@
 #pragma once
 
 #include "cudaq/Optimizer/Dialect/CC/CCOps.h"
-#include "cudaq/Optimizer/Dialect/CC/CCTypes.h"
-#include "cudaq/qis/state.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Types.h"
 #include <unordered_set>
 #include <vector>
 
-namespace cudaq {
-namespace opt {
+namespace cudaq_internal {
+namespace compiler {
 
 class ArgumentConverter;
 
@@ -33,7 +30,7 @@ public:
 
   /// Get the list of substitutions for this kernel that were generated
   /// by `ArgumentConverter::gen()`.
-  mlir::SmallVector<cc::ArgumentSubstitutionOp> &getSubstitutions() {
+  mlir::SmallVector<cudaq::cc::ArgumentSubstitutionOp> &getSubstitutions() {
     return substitutions;
   }
 
@@ -42,7 +39,7 @@ public:
 private:
   mlir::StringRef kernelName;
   mlir::ModuleOp substModule;
-  mlir::SmallVector<cc::ArgumentSubstitutionOp> substitutions;
+  mlir::SmallVector<cudaq::cc::ArgumentSubstitutionOp> substitutions;
 
   friend ArgumentConverter;
 };
@@ -111,9 +108,7 @@ private:
   /// Kernel we are substituting the arguments for.
   mlir::StringRef kernelName;
 };
-} // namespace opt
 
-namespace detail {
 /// Merge modules from any CallableClosureArgument arguments into \p intoModule.
 /// The \p rawArgs must correspond to the entry point function with the short
 /// name \p shortName that must appear in \p intoModule.
@@ -128,6 +123,6 @@ bool mergeAllCallableClosures(mlir::ModuleOp intoModule,
                               const std::string &shortName,
                               const std::vector<void *> &rawArgs,
                               std::optional<unsigned> betaRedux = {});
-} // namespace detail
 
-} // namespace cudaq
+} // namespace compiler
+} // namespace cudaq_internal

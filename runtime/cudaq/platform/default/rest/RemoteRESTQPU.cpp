@@ -7,7 +7,7 @@
  ******************************************************************************/
 
 #include "common/BaseRemoteRESTQPU.h"
-#include "common/RuntimeMLIR.h"
+#include "cudaq_internal/compiler/RuntimeMLIR.h"
 
 using namespace mlir;
 

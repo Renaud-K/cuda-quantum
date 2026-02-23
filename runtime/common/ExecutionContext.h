@@ -12,9 +12,9 @@
 #include "NoiseModel.h"
 #include "SampleResult.h"
 #include "Trace.h"
-#include "common/JIT.h"
 #include "cudaq/algorithms/optimizer.h"
 #include "cudaq/operators.h"
+#include "cudaq_internal/compiler/JIT.h"
 #include <optional>
 #include <string_view>
 
@@ -26,6 +26,8 @@ class ExecutionManager;
 /// The ExecutionContext is an abstraction to indicate how a CUDA-Q kernel
 /// should be executed.
 class ExecutionContext {
+  using JitEngine = cudaq_internal::compiler::JitEngine;
+
 public:
   /// @brief The Constructor, takes the name of the context
   /// @param n The name of the context

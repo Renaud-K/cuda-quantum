@@ -6,7 +6,7 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#include "RuntimeMLIR.h"
+#include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "common/CodeGenConfig.h"
 #include "common/Timing.h"
 #include "cudaq/Optimizer/Builder/Intrinsics.h"
@@ -44,36 +44,38 @@
 
 using namespace mlir;
 
+namespace cudaq_internal::compiler {
+
 namespace {
-llvm::StringMap<cudaq::Translation> &getTranslationRegistry() {
-  static llvm::StringMap<cudaq::Translation> translationBundle;
+llvm::StringMap<Translation> &getTranslationRegistry() {
+  static llvm::StringMap<Translation> translationBundle;
   return translationBundle;
 }
 
 void registerTranslation(StringRef name, StringRef description,
-                         const cudaq::TranslateFromMLIRFunction &function) {
+                         const TranslateFromMLIRFunction &function) {
   assert(!name.contains(':') && "name and profile only");
   auto &registry = getTranslationRegistry();
   if (registry.count(name))
     return;
   assert(function &&
          "Attempting to register an empty translate <file-to-file> function");
-  registry[name] = cudaq::Translation(function, description);
+  registry[name] = Translation(function, description);
 }
 
 void registerTranslation(StringRef name, StringRef description,
-                         const cudaq::TranslateFromMLIRFunctionExtended &f) {
+                         const TranslateFromMLIRFunctionExtended &f) {
   assert(!name.contains(':') && "name and profile only");
   auto &registry = getTranslationRegistry();
   if (registry.count(name))
     return;
   assert(f &&
          "Attempting to register an empty translate <file-to-file> function");
-  registry[name] = cudaq::Translation(f, description);
+  registry[name] = Translation(f, description);
 }
 } // namespace
 
-cudaq::Translation &cudaq::getTranslation(StringRef name) {
+Translation &getTranslation(StringRef name) {
   auto namePair = name.split(':');
   auto &registry = getTranslationRegistry();
   if (!registry.count(namePair.first))
@@ -82,21 +84,19 @@ cudaq::Translation &cudaq::getTranslation(StringRef name) {
   return registry[namePair.first];
 }
 
-cudaq::TranslateFromMLIRRegistration::TranslateFromMLIRRegistration(
+TranslateFromMLIRRegistration::TranslateFromMLIRRegistration(
     StringRef name, StringRef description,
     const TranslateFromMLIRFunction &function) {
   registerTranslation(name, description, function);
 }
 
-cudaq::TranslateFromMLIRRegistration::TranslateFromMLIRRegistration(
+TranslateFromMLIRRegistration::TranslateFromMLIRRegistration(
     StringRef name, StringRef description,
     const TranslateFromMLIRFunctionExtended &function) {
   registerTranslation(name, description, function);
 }
 
-namespace cudaq {
 void initializeLangMLIR();
-}
 
 namespace {
 bool setupTargetTriple(llvm::Module *llvmModule) {
@@ -659,7 +659,7 @@ mlir::LogicalResult qirProfileTranslationFunction(
 
 void registerToQIRTranslation() {
 #define CREATE_QIR_REGISTRATION(_regName, _profile)                            \
-  cudaq::TranslateFromMLIRRegistration _regName(                               \
+  TranslateFromMLIRRegistration _regName(                                      \
       _profile, "translate from quake to " _profile,                           \
       [](mlir::Operation *op, const std::string &transportTriple,              \
          llvm::raw_string_ostream &output,                                     \
@@ -675,7 +675,7 @@ void registerToQIRTranslation() {
 }
 
 void registerToOpenQASMTranslation() {
-  cudaq::TranslateFromMLIRRegistration reg(
+  TranslateFromMLIRRegistration reg(
       "qasm2", "translate from quake to openQASM 2.0",
       [](mlir::Operation *op, llvm::raw_string_ostream &output,
          const std::string &additionalPasses, bool printIR,
@@ -706,7 +706,7 @@ void registerToOpenQASMTranslation() {
 }
 
 void registerToIQMJsonTranslation() {
-  cudaq::TranslateFromMLIRRegistration reg(
+  TranslateFromMLIRRegistration reg(
       "iqm", "translate from quake to IQM's json format",
       [](mlir::Operation *op, llvm::raw_string_ostream &output,
          const std::string &additionalPasses, bool printIR,
@@ -750,10 +750,10 @@ std::unique_ptr<MLIRContext> createMLIRContext() {
 }
 } // namespace
 
-void cudaq::initializeMLIR() {
+void initializeMLIR() {
   // One-time initialization of LLVM/MLIR components
   std::call_once(mlir_init_flag, []() {
-    cudaq::initializeLangMLIR();
+    initializeLangMLIR();
     registerToQIRTranslation();
     registerToOpenQASMTranslation();
     registerToIQMJsonTranslation();
@@ -762,20 +762,19 @@ void cudaq::initializeMLIR() {
   });
 }
 
-MLIRContext *cudaq::getMLIRContext() {
+MLIRContext *getMLIRContext() {
   // One-time initialization of LLVM/MLIR components
-  cudaq::initializeMLIR();
+  initializeMLIR();
   return mlirContext;
 }
 
-std::unique_ptr<MLIRContext> cudaq::getOwningMLIRContext() {
+std::unique_ptr<MLIRContext> getOwningMLIRContext() {
   // One-time initialization of LLVM/MLIR components
-  cudaq::initializeMLIR();
+  initializeMLIR();
   return createMLIRContext();
 }
 
-std::optional<std::string>
-cudaq::getEntryPointName(OwningOpRef<ModuleOp> &module) {
+std::optional<std::string> getEntryPointName(OwningOpRef<ModuleOp> &module) {
   for (auto &a : *module) {
     if (auto op = dyn_cast<mlir::func::FuncOp>(a)) {
       // Note: the .thunk function is where unmarshalling happens. It is *not*
@@ -786,3 +785,5 @@ cudaq::getEntryPointName(OwningOpRef<ModuleOp> &module) {
   }
   return std::nullopt;
 }
+
+} // namespace cudaq_internal::compiler

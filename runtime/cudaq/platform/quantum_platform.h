@@ -59,6 +59,8 @@ using ObserveTask = std::function<observe_result()>;
 /// be subclassed for concrete realizations of quantum platforms, which
 /// are intended to populate this platformQPUs member of this base class.
 class quantum_platform {
+  using JitEngine = cudaq_internal::compiler::JitEngine;
+
 public:
   quantum_platform() = default;
   virtual ~quantum_platform() = default;
@@ -207,11 +209,12 @@ public:
                const std::vector<void *> &rawArgs, mlir::Type resultTy,
                std::size_t qpu_id);
 
-  [[nodiscard]] void *
-  specializeModule(const std::string &kernelName, mlir::ModuleOp module,
-                   const std::vector<void *> &rawArgs, mlir::Type resultTy,
-                   std::optional<cudaq::JitEngine> &cachedEngine,
-                   std::size_t qpu_id, bool isEntryPoint);
+  [[nodiscard]] void *specializeModule(const std::string &kernelName,
+                                       mlir::ModuleOp module,
+                                       const std::vector<void *> &rawArgs,
+                                       mlir::Type resultTy,
+                                       std::optional<JitEngine> &cachedEngine,
+                                       std::size_t qpu_id, bool isEntryPoint);
 
   /// List all available platforms
   static std::vector<std::string> list_platforms();

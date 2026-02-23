@@ -10,10 +10,12 @@
 #include <string>
 #include <vector>
 
-namespace cudaq {
+namespace cudaq_internal {
+namespace compiler {
 
 using LayoutInfoType = std::pair<std::size_t, std::vector<std::size_t>>;
 
 LayoutInfoType getLayoutInfo(const std::string &name,
                              void *opt_module = nullptr);
-} // namespace cudaq
+} // namespace compiler
+} // namespace cudaq_internal

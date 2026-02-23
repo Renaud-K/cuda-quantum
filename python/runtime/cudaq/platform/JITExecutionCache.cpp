@@ -31,7 +31,8 @@ void JITExecutionCache::deleteJITEngine(std::size_t hash) {
   }
 }
 
-void JITExecutionCache::cache(std::size_t hash, JitEngine jit) {
+void JITExecutionCache::cache(std::size_t hash,
+                              JITExecutionCache::JitEngine jit) {
   std::scoped_lock<std::mutex> lock(mutex);
 
   lruList.push_back(hash);
@@ -47,7 +48,7 @@ void JITExecutionCache::cache(std::size_t hash, JitEngine jit) {
 
   cacheMap.insert({hash, {jit, std::prev(lruList.end())}});
 }
-JitEngine JITExecutionCache::getJITEngine(std::size_t hash) {
+JITExecutionCache::JitEngine JITExecutionCache::getJITEngine(std::size_t hash) {
   std::scoped_lock<std::mutex> lock(mutex);
   auto &item = cacheMap.at(hash);
 

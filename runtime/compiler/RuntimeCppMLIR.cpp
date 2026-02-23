@@ -10,11 +10,11 @@
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 
-namespace cudaq {
+namespace cudaq_internal::compiler {
 
 void initializeLangMLIR() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   cudaq::registerAllPasses();
 }
-} // namespace cudaq
+} // namespace cudaq_internal::compiler

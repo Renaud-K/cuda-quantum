@@ -6,7 +6,7 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#include "JIT.h"
+#include "cudaq_internal/compiler/JIT.h"
 #include "common/Environment.h"
 #include "common/Timing.h"
 #include "cudaq/Frontend/nvqpp/AttributeNames.h"
@@ -45,10 +45,11 @@
 
 #define DEBUG_TYPE "cudaq-qpud"
 
+namespace cudaq_internal::compiler {
+
 std::tuple<std::unique_ptr<llvm::orc::LLJIT>, std::function<void()>>
-cudaq::createWrappedKernel(std::string_view irString,
-                           const std::string &entryPointFn, void *args,
-                           std::uint64_t argsSize) {
+createWrappedKernel(std::string_view irString, const std::string &entryPointFn,
+                    void *args, std::uint64_t argsSize) {
 
   std::unique_ptr<llvm::LLVMContext> ctx(new llvm::LLVMContext);
   // Parse bitcode
@@ -238,8 +239,8 @@ void insertSetupAndCleanupOperations(mlir::Operation *module) {
 }
 } // namespace
 
-cudaq::JitEngine cudaq::createQIRJITEngine(mlir::ModuleOp &moduleOp,
-                                           llvm::StringRef convertTo) {
+JitEngine createQIRJITEngine(mlir::ModuleOp &moduleOp,
+                             llvm::StringRef convertTo) {
   // The "fast" instruction selection compilation algorithm is actually very
   // slow for large quantum circuits. Disable that here.
   ScopedTraceWithContext(cudaq::TIMING_JIT, "createQIRJITEngine");
@@ -276,7 +277,7 @@ cudaq::JitEngine cudaq::createQIRJITEngine(mlir::ModuleOp &moduleOp,
       cudaq::opt::addAOTPipelineConvertToQIR(pm);
 
     auto enablePrintMLIREachPass =
-        getEnvBool("CUDAQ_MLIR_PRINT_EACH_PASS", false);
+        cudaq::getEnvBool("CUDAQ_MLIR_PRINT_EACH_PASS", false);
     if (enablePrintMLIREachPass) {
       module->getContext()->disableMultithreading();
       pm.enableIRPrinting();
@@ -325,7 +326,6 @@ cudaq::JitEngine cudaq::createQIRJITEngine(mlir::ModuleOp &moduleOp,
   return JitEngine(std::move(jitOrError.get()));
 }
 
-namespace cudaq {
 class JitEngine::Impl {
 public:
   Impl(std::unique_ptr<mlir::ExecutionEngine> jitEngine)
@@ -365,4 +365,4 @@ void (*JitEngine::lookupRawNameOrFail(const std::string &kernelName) const)() {
   return impl->lookupRawNameOrFail(kernelName);
 }
 
-} // namespace cudaq
+} // namespace cudaq_internal::compiler

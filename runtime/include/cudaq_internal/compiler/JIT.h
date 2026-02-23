@@ -25,7 +25,8 @@ class ExecutionEngine;
 class ModuleOp;
 } // namespace mlir
 
-namespace cudaq {
+namespace cudaq_internal {
+namespace compiler {
 
 /// Util to create a wrapped kernel defined by LLVM IR with serialized
 /// arguments.
@@ -56,4 +57,5 @@ private:
 JitEngine createQIRJITEngine(mlir::ModuleOp &moduleOp,
                              llvm::StringRef convertTo);
 
-} // namespace cudaq
+} // namespace compiler
+} // namespace cudaq_internal

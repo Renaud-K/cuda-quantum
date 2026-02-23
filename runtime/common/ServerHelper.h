@@ -10,12 +10,12 @@
 
 #include "ExecutionContext.h"
 #include "Future.h"
-#include "JIT.h"
 #include "Registry.h"
 #include "Resources.h"
 #include "RuntimeTarget.h"
 #include "SampleResult.h"
 #include "common/RecordLogParser.h"
+#include "cudaq_internal/compiler/JIT.h"
 #include "nlohmann/json.hpp"
 #include <filesystem>
 
@@ -29,6 +29,7 @@ using BackendConfig = std::map<std::string, std::string>;
 /// (optionally) an output_names mapping showing how each Result maps back
 /// to the original program's Qubits.
 struct KernelExecution {
+  using JitEngine = cudaq_internal::compiler::JitEngine;
   std::string name;
   std::string code;
   std::optional<JitEngine> jit;

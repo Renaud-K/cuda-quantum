@@ -27,7 +27,8 @@ cudaq::QPU::launchModule(const std::string &name, mlir::ModuleOp module,
 void *cudaq::QPU::specializeModule(
     const std::string &name, mlir::ModuleOp module,
     const std::vector<void *> &rawArgs, mlir::Type resultTy,
-    std::optional<cudaq::JitEngine> &cachedEngine, bool isEntryPoint) {
+    std::optional<cudaq_internal::compiler::JitEngine> &cachedEngine,
+    bool isEntryPoint) {
   auto launcher = registry::get<ModuleLauncher>("default");
   if (!launcher)
     throw std::runtime_error(

@@ -41,6 +41,8 @@ ExecutionManager *getExecutionManager();
 ///
 /// This type is meant to be subtyped by concrete quantum_platform subtypes.
 class QPU : public registry::RegisteredType<QPU> {
+  using JitEngine = cudaq_internal::compiler::JitEngine;
+
 protected:
   /// The logical id of this QPU in the platform set of QPUs
   std::size_t qpu_id = 0;
@@ -210,8 +212,7 @@ public:
   [[nodiscard]] virtual void *
   specializeModule(const std::string &name, mlir::ModuleOp module,
                    const std::vector<void *> &rawArgs, mlir::Type resultTy,
-                   std::optional<cudaq::JitEngine> &cachedEngine,
-                   bool isEntryPoint);
+                   std::optional<JitEngine> &cachedEngine, bool isEntryPoint);
 
   /// @brief Notify the QPU that a new random seed value is set.
   /// By default do nothing, let subclasses override.
@@ -219,6 +220,7 @@ public:
 };
 
 struct ModuleLauncher : public registry::RegisteredType<ModuleLauncher> {
+  using JitEngine = cudaq_internal::compiler::JitEngine;
   virtual ~ModuleLauncher() = default;
 
   virtual KernelThunkResultType launchModule(const std::string &name,
@@ -228,7 +230,7 @@ struct ModuleLauncher : public registry::RegisteredType<ModuleLauncher> {
   virtual void *specializeModule(const std::string &name, mlir::ModuleOp module,
                                  const std::vector<void *> &rawArgs,
                                  mlir::Type resultTy,
-                                 std::optional<cudaq::JitEngine> &cachedEngine,
+                                 std::optional<JitEngine> &cachedEngine,
                                  bool isEntryPoint) = 0;
 };
 

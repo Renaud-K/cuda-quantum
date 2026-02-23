@@ -7,9 +7,9 @@
  ******************************************************************************/
 
 #include "py_run.h"
-#include "common/LayoutInfo.h"
 #include "cudaq/Optimizer/Transforms/Passes.h"
 #include "cudaq/algorithms/run.h"
+#include "cudaq_internal/compiler/LayoutInfo.h"
 #include "runtime/cudaq/platform/py_alt_launch_kernel.h"
 #include "utils/OpaqueArguments.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -21,6 +21,7 @@
 #include <pybind11/stl.h>
 
 using namespace cudaq;
+using namespace cudaq_internal;
 
 static std::vector<py::object> readRunResults(mlir::ModuleOp module,
                                               mlir::Type ty,
@@ -80,7 +81,7 @@ pyRunTheKernel(const std::string &name, quantum_platform &platform,
                                "`list` of `dataclass`/`tuple` from "
                                "entry-point kernels.");
   }
-  auto layoutInfo = getLayoutInfo(name, mod.getOperation());
+  auto layoutInfo = compiler::getLayoutInfo(name, mod.getOperation());
   auto results = details::runTheKernel(
       [&]() mutable {
         [[maybe_unused]] auto result =

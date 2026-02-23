@@ -7,11 +7,8 @@
  ******************************************************************************/
 
 #include "QPU.h"
-#include "common/ArgumentConversion.h"
 #include "common/Environment.h"
 #include "common/ExecutionContext.h"
-#include "common/JIT.h"
-#include "common/RuntimeMLIR.h"
 #include "cudaq/Optimizer/Builder/Intrinsics.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CodeGen/OpenQASMEmitter.h"
@@ -19,6 +16,9 @@
 #include "cudaq/Optimizer/Dialect/Quake/QuakeOps.h"
 #include "cudaq/Optimizer/Transforms/AddMetadata.h"
 #include "cudaq/Optimizer/Transforms/Passes.h"
+#include "cudaq_internal/compiler/ArgumentConversion.h"
+#include "cudaq_internal/compiler/JIT.h"
+#include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Export.h"
@@ -32,7 +32,7 @@ static void specializeKernel(const std::string &name, ModuleOp module,
                              bool enablePythonCodegenDump = false,
                              bool isEntryPoint = true) {
   PassManager pm(module.getContext());
-  cudaq::opt::ArgumentConverter argCon(name, module);
+  cudaq_internal::compiler::ArgumentConverter argCon(name, module);
   argCon.gen(name, module, rawArgs);
   SmallVector<std::string> kernels;
   SmallVector<std::string> substs;
@@ -95,7 +95,8 @@ std::string cudaq::detail::lower_to_qir_llvm(const std::string &name,
                                              const std::string &format) {
   ScopedTraceWithContext(cudaq::TIMING_JIT, "getQIR", name);
   // Translate the module to QIR transport layer (as LLVM code).
-  cudaq::detail::mergeAllCallableClosures(module, name, args.getArgs());
+  cudaq_internal::compiler::mergeAllCallableClosures(module, name,
+                                                     args.getArgs());
   specializeKernel(name, module, args.getArgs());
   PassManager pm(module.getContext());
   cudaq::opt::addAggressiveInlining(pm);
@@ -124,7 +125,8 @@ std::string cudaq::detail::lower_to_openqasm(const std::string &name,
                                              OpaqueArguments &args) {
   ScopedTraceWithContext(cudaq::TIMING_JIT, "getASM", name);
   // Translate module to OpenQASM2 transport layer.
-  cudaq::detail::mergeAllCallableClosures(module, name, args.getArgs());
+  cudaq_internal::compiler::mergeAllCallableClosures(module, name,
+                                                     args.getArgs());
   specializeKernel(name, module, args.getArgs());
   auto *ctx = module.getContext();
   PassManager pm(ctx);
@@ -166,7 +168,8 @@ static void updateExecutionContext(ModuleOp module) {
   }
 }
 
-static std::optional<cudaq::JitEngine> alreadyBuiltJITCode() {
+static std::optional<cudaq_internal::compiler::JitEngine>
+alreadyBuiltJITCode() {
   auto *currentExecCtx = cudaq::getExecutionContext();
   if (!currentExecCtx || !currentExecCtx->allowJitEngineCaching)
     return std::nullopt;
@@ -177,7 +180,7 @@ static std::optional<cudaq::JitEngine> alreadyBuiltJITCode() {
 /// cached so that it can be called many times in a loop without being
 /// recompiled. This exploits the fact that the arguments processed at the
 /// sample callsite are invariant by the definition of a `CUDA-Q` kernel.
-static void cacheJITForPerformance(cudaq::JitEngine jit) {
+static void cacheJITForPerformance(cudaq_internal::compiler::JitEngine jit) {
   auto *currentExecCtx = cudaq::getExecutionContext();
   if (currentExecCtx && currentExecCtx->allowJitEngineCaching) {
     if (!currentExecCtx->jitEng)
@@ -212,7 +215,7 @@ struct PythonLauncher : public cudaq::ModuleLauncher {
                                  " found in module");
 
       // 2. Merge other modules (e.g., if there are device kernel calls).
-      cudaq::detail::mergeAllCallableClosures(module, name, rawArgs);
+      cudaq_internal::compiler::mergeAllCallableClosures(module, name, rawArgs);
 
       // Mark all newly merged kernels private.
       for (auto &op : module)
@@ -230,7 +233,7 @@ struct PythonLauncher : public cudaq::ModuleLauncher {
                        enablePythonCodegenDump);
 
       // 4. Execute the code right here, right now.
-      jit = cudaq::createQIRJITEngine(module, "qir:");
+      jit = cudaq_internal::compiler::createQIRJITEngine(module, "qir:");
     }
 
     if (resultTy) {
@@ -252,10 +255,11 @@ struct PythonLauncher : public cudaq::ModuleLauncher {
     return result;
   }
 
-  void *specializeModule(const std::string &name, ModuleOp module,
-                         const std::vector<void *> &rawArgs, Type resultTy,
-                         std::optional<cudaq::JitEngine> &cachedEngine,
-                         bool isEntryPoint) override {
+  void *specializeModule(
+      const std::string &name, ModuleOp module,
+      const std::vector<void *> &rawArgs, Type resultTy,
+      std::optional<cudaq_internal::compiler::JitEngine> &cachedEngine,
+      bool isEntryPoint) override {
     // In this launch scenario, we have a ModuleOp that has the entry-point
     // kernel, but needs to be merged with anything else it may call. The
     // merging of modules mirrors the late binding and dynamic scoping of the
@@ -273,7 +277,7 @@ struct PythonLauncher : public cudaq::ModuleLauncher {
       throw std::runtime_error("no kernel named " + name + " found in module");
 
     // 2. Merge other modules (e.g., if there are device kernel calls).
-    cudaq::detail::mergeAllCallableClosures(module, name, rawArgs);
+    cudaq_internal::compiler::mergeAllCallableClosures(module, name, rawArgs);
 
     // Mark all newly merged kernels private.
     for (auto &op : module)
@@ -291,7 +295,7 @@ struct PythonLauncher : public cudaq::ModuleLauncher {
                      isEntryPoint);
 
     // 4. Execute the code right here, right now.
-    auto jit = cudaq::createQIRJITEngine(module, "qir:");
+    auto jit = cudaq_internal::compiler::createQIRJITEngine(module, "qir:");
     if (cachedEngine)
       throw std::runtime_error("cache must not be populated");
     cachedEngine = jit;

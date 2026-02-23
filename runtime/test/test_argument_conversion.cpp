@@ -11,12 +11,12 @@
 
 // RUN: test_argument_conversion | FileCheck %s
 
-#include "common/ArgumentConversion.h"
 #include "cudaq/Optimizer/Dialect/CC/CCDialect.h"
 #include "cudaq/Optimizer/Dialect/Quake/QuakeDialect.h"
 #include "cudaq/Optimizer/InitAllDialects.h"
 #include "cudaq/qis/pauli_word.h"
 #include "cudaq/qis/state.h"
+#include "cudaq_internal/compiler/ArgumentConversion.h"
 #include "mlir/Parser/Parser.h"
 #include <memory>
 #include <numeric>
@@ -139,7 +139,7 @@ public:
 
 extern "C" void __cudaq_deviceCodeHolderAdd(const char *, const char *);
 
-void dumpSubstitutionModules(cudaq::opt::ArgumentConverter &con) {
+void dumpSubstitutionModules(cudaq_internal::compiler::ArgumentConverter &con) {
   // Dump the conversions
   for (auto *kInfo : con.getKernelSubstitutions())
     llvm::outs() << "========================================\n"
@@ -164,7 +164,7 @@ func.func @__nvqpp__mlirgen__testy(%0: )#" +
   // Create the Module
   auto mod = mlir::parseSourceString<mlir::ModuleOp>(code, ctx);
   llvm::outs() << "Source module:\n" << *mod << '\n';
-  cudaq::opt::ArgumentConverter ab{"testy", *mod};
+  cudaq_internal::compiler::ArgumentConverter ab{"testy", *mod};
   // Create the argument conversions
   ab.gen(args);
   // Dump all conversions
@@ -207,7 +207,7 @@ void doTest(mlir::MLIRContext *ctx, std::vector<std::string> &typeNames,
   // Create the Module
   auto mod = mlir::parseSourceString<mlir::ModuleOp>(code, ctx);
   llvm::outs() << "Source module:\n" << *mod << '\n';
-  cudaq::opt::ArgumentConverter ab{"testy", *mod};
+  cudaq_internal::compiler::ArgumentConverter ab{"testy", *mod};
   // Create the argument conversions
   ab.gen_drop_front(args, startingArgIdx);
   // Dump all conversions

@@ -22,6 +22,7 @@
 LLVM_INSTANTIATE_REGISTRY(cudaq::QPU::RegistryType)
 
 namespace cudaq {
+using namespace cudaq_internal;
 
 // These functions are defined elsewhere, but
 // we are going to use them here.
@@ -225,7 +226,7 @@ KernelThunkResultType quantum_platform::launchModule(
 void *quantum_platform::specializeModule(
     const std::string &kernelName, mlir::ModuleOp module,
     const std::vector<void *> &rawArgs, mlir::Type resTy,
-    std::optional<cudaq::JitEngine> &cachedEngine, std::size_t qpu_id,
+    std::optional<compiler::JitEngine> &cachedEngine, std::size_t qpu_id,
     bool isEntryPoint) {
   validateQpuId(qpu_id);
   auto &qpu = platformQPUs[qpu_id];
@@ -328,7 +329,7 @@ cudaq::KernelThunkResultType cudaq::streamlinedLaunchModule(
 void *cudaq::streamlinedSpecializeModule(
     const std::string &kernelName, mlir::ModuleOp moduleOp,
     const std::vector<void *> &rawArgs, mlir::Type resTy,
-    std::optional<cudaq::JitEngine> &cachedEngine, bool isEntryPoint) {
+    std::optional<compiler::JitEngine> &cachedEngine, bool isEntryPoint) {
   ScopedTraceWithContext("streamlinedSpecializeModule", kernelName,
                          rawArgs.size());
 

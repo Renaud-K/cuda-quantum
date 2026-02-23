@@ -6,12 +6,12 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#include "LayoutInfo.h"
-#include "RuntimeMLIR.h"
+#include "cudaq_internal/compiler/LayoutInfo.h"
 #include "common/DeviceCodeRegistry.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CodeGen/QIROpaqueStructTypes.h"
 #include "cudaq/runtime/logger/logger.h"
+#include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "llvm/IR/DataLayout.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
@@ -20,9 +20,10 @@
 
 using namespace mlir;
 
+namespace cudaq_internal::compiler {
+
 namespace {
-cudaq::LayoutInfoType extractLayout(const std::string &kernelName,
-                                    ModuleOp moduleOp) {
+LayoutInfoType extractLayout(const std::string &kernelName, ModuleOp moduleOp) {
   auto *fnOp =
       moduleOp.lookupSymbol(cudaq::runtime::cudaqGenPrefixName + kernelName);
   if (!fnOp)
@@ -77,17 +78,16 @@ cudaq::LayoutInfoType extractLayout(const std::string &kernelName,
   return {totalSize, fieldOffsets};
 }
 
-cudaq::LayoutInfoType extractLayout(const std::string &kernelName,
-                                    const std::string &quakeCode) {
-  auto moduleOp = parseSourceString<ModuleOp>(StringRef(quakeCode),
-                                              cudaq::getMLIRContext());
+LayoutInfoType extractLayout(const std::string &kernelName,
+                             const std::string &quakeCode) {
+  auto moduleOp =
+      parseSourceString<ModuleOp>(StringRef(quakeCode), getMLIRContext());
   if (!moduleOp)
     throw std::runtime_error("module cannot be parsed");
   return extractLayout(kernelName, *moduleOp);
 }
 } // namespace
 
-namespace cudaq {
 LayoutInfoType getLayoutInfo(const std::string &name, void *opt_module) {
   if (opt_module) {
     // In Python, the interpreter already has the ModuleOp resident.
@@ -100,4 +100,4 @@ LayoutInfoType getLayoutInfo(const std::string &name, void *opt_module) {
     return extractLayout(name, quakeCode);
   return {};
 }
-} // namespace cudaq
+} // namespace cudaq_internal::compiler

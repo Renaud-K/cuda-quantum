@@ -8,12 +8,9 @@
 
 #pragma once
 
-#include "common/ArgumentConversion.h"
 #include "common/ExecutionContext.h"
-#include "common/JIT.h"
 #include "common/RemoteKernelExecutor.h"
 #include "common/Resources.h"
-#include "common/RuntimeMLIR.h"
 #include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/Transforms/Passes.h"
@@ -23,6 +20,9 @@
 #include "cudaq/platform/qpu.h"
 #include "cudaq/platform/quantum_platform.h"
 #include "cudaq/runtime/logger/logger.h"
+#include "cudaq_internal/compiler/ArgumentConversion.h"
+#include "cudaq_internal/compiler/JIT.h"
+#include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
@@ -33,6 +33,8 @@ namespace cudaq {
 // Remote QPU: delegating the execution to a remotely-hosted server, which can
 // reinstate the execution context and JIT-invoke the kernel.
 class BaseRemoteSimulatorQPU : public QPU {
+  using JitEngine = cudaq_internal::compiler::JitEngine;
+
 protected:
   std::string m_simName;
   std::unique_ptr<mlir::MLIRContext> m_mlirContext;
@@ -150,7 +152,7 @@ public:
 
   void *specializeModule(const std::string &kernelName, mlir::ModuleOp module,
                          const std::vector<void *> &rawArgs, mlir::Type resTy,
-                         std::optional<cudaq::JitEngine> &cachedEngine,
+                         std::optional<JitEngine> &cachedEngine,
                          bool isEntryPoint) override {
     CUDAQ_INFO("specializing remote simulator kernel via module ({})",
                kernelName);
@@ -186,14 +188,16 @@ public:
           if (!rawArgs)
             throw std::runtime_error(
                 "must provide launch arguments (got nullptr)");
-          detail::mergeAllCallableClosures(prefabMod, name, *rawArgs);
+          cudaq_internal::compiler::mergeAllCallableClosures(prefabMod, name,
+                                                             *rawArgs);
           return m_client->lowerKernelInPlace(prefabMod, name, *rawArgs);
         }
         return m_client->lowerKernel(*m_mlirContext, name, args, voidStarSize,
                                      0, rawArgs);
       }();
 
-      auto jit = createQIRJITEngine(moduleOp, "qir-adaptive");
+      auto jit = cudaq_internal::compiler::createQIRJITEngine(moduleOp,
+                                                              "qir-adaptive");
 
       ExecutionContext ctx(executionContextPtr->name,
                            executionContextPtr->shots,
