@@ -153,7 +153,7 @@ void bindExecutionContext(py::module_ &mod) {
       "Within this context, CUDAQ will blindly reuse compiled objects."
       "It is up to the user to ensure that there are never two distinct"
       "computations launched within a single context.")
-      .def(py::init())
+      .def(py::init<>())
       .def("__enter__",
            [](PersistJITEngine &ctx) -> void {
              cudaq::compiler_artifact::enablePersistentJITEngine();
@@ -161,6 +161,7 @@ void bindExecutionContext(py::module_ &mod) {
       .def("__exit__", [](PersistJITEngine &ctx, py::object type,
                           py::object value, py::object traceback) {
         cudaq::compiler_artifact::disablePersistentJITEngine();
-      });
+      },
+      py::arg().none(), py::arg().none(), py::arg().none());
 }
 } // namespace cudaq

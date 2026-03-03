@@ -21,12 +21,16 @@
 #include "cudaq/ptsbe/strategies/ProbabilisticSamplingStrategy.h"
 #include "runtime/cudaq/platform/py_alt_launch_kernel.h"
 #include "utils/OpaqueArguments.h"
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include <pybind11/stl.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/pair.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 using namespace cudaq;
 
@@ -50,11 +54,12 @@ pySamplePTSBE(const std::string &shortName, MlirModule module,
 
   if (!sampling_strategy.is_none())
     ptsbe_options.strategy =
-        sampling_strategy.cast<std::shared_ptr<ptsbe::PTSSamplingStrategy>>();
+        py::cast<std::shared_ptr<ptsbe::PTSSamplingStrategy>>(
+            sampling_strategy);
 
   if (!shot_allocation_obj.is_none())
     ptsbe_options.shot_allocation =
-        shot_allocation_obj.cast<ptsbe::ShotAllocationStrategy>();
+        py::cast<ptsbe::ShotAllocationStrategy>(shot_allocation_obj);
 
   auto mod = unwrap(module);
   runtimeArgs = simplifiedValidateInputArguments(runtimeArgs);
@@ -118,11 +123,12 @@ pySampleAsyncPTSBE(const std::string &shortName, MlirModule module,
 
   if (!sampling_strategy.is_none())
     ptsbe_options.strategy =
-        sampling_strategy.cast<std::shared_ptr<ptsbe::PTSSamplingStrategy>>();
+        py::cast<std::shared_ptr<ptsbe::PTSSamplingStrategy>>(
+            sampling_strategy);
 
   if (!shot_allocation_obj.is_none())
     ptsbe_options.shot_allocation =
-        shot_allocation_obj.cast<ptsbe::ShotAllocationStrategy>();
+        py::cast<ptsbe::ShotAllocationStrategy>(shot_allocation_obj);
 
   auto mod = unwrap(module);
   runtimeArgs = simplifiedValidateInputArguments(runtimeArgs);
@@ -146,13 +152,12 @@ pySampleAsyncPTSBE(const std::string &shortName, MlirModule module,
       noiseModel));
 }
 
-void cudaq::bindSamplePTSBE(py::module &mod) {
+void cudaq::bindSamplePTSBE(py::module_ &mod) {
   auto ptsbe = mod.def_submodule(
       "ptsbe", "PTSBE (Pre-Trajectory Sampling with Batch Execution)");
 
   // Base strategy class (abstract, not directly constructible)
-  py::class_<ptsbe::PTSSamplingStrategy,
-             std::shared_ptr<ptsbe::PTSSamplingStrategy>>(
+  py::class_<ptsbe::PTSSamplingStrategy>(
       ptsbe, "PTSSamplingStrategy",
       "Base class for trajectory sampling strategies.")
       .def("name", &ptsbe::PTSSamplingStrategy::name,
@@ -177,24 +182,25 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
       ptsbe, "ShotAllocationStrategy",
       "Strategy for allocating shots across selected trajectories.")
       .def(py::init<>(), "Create a default (PROPORTIONAL) strategy.")
-      .def(py::init([](ptsbe::ShotAllocationStrategy::Type t, double bias,
-                       std::optional<std::uint64_t> seed) {
-             return ptsbe::ShotAllocationStrategy(t, bias, seed);
-           }),
+      .def("__init__",
+           [](ptsbe::ShotAllocationStrategy *self,
+              ptsbe::ShotAllocationStrategy::Type t, double bias,
+              std::optional<std::uint64_t> seed) {
+             new (self) ptsbe::ShotAllocationStrategy(t, bias, seed);
+           },
            py::arg("type"), py::arg("bias_strength") = 2.0,
            py::arg("seed") = py::none(),
            "Create a strategy with specified type, optional bias strength, "
            "and optional random seed. When seed is None (default), uses "
            "CUDA-Q's global random seed.")
-      .def_readwrite("type", &ptsbe::ShotAllocationStrategy::type,
-                     "The allocation strategy type.")
-      .def_readwrite("bias_strength",
-                     &ptsbe::ShotAllocationStrategy::bias_strength,
-                     "Bias factor for weighted strategies (default: 2.0).");
+      .def_rw("type", &ptsbe::ShotAllocationStrategy::type,
+              "The allocation strategy type.")
+      .def_rw("bias_strength",
+              &ptsbe::ShotAllocationStrategy::bias_strength,
+              "Bias factor for weighted strategies (default: 2.0).");
 
   // Concrete strategies
-  py::class_<ptsbe::ProbabilisticSamplingStrategy, ptsbe::PTSSamplingStrategy,
-             std::shared_ptr<ptsbe::ProbabilisticSamplingStrategy>>(
+  py::class_<ptsbe::ProbabilisticSamplingStrategy, ptsbe::PTSSamplingStrategy>(
       ptsbe, "ProbabilisticSamplingStrategy",
       "Sample trajectories randomly based on their occurrence probabilities.")
       .def(py::init<std::optional<std::uint64_t>, std::optional<std::size_t>>(),
@@ -207,14 +213,12 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
            "The loop stops early once max_trajectories unique patterns are "
            "found. When None (default), a budget is auto-calculated.");
 
-  py::class_<ptsbe::OrderedSamplingStrategy, ptsbe::PTSSamplingStrategy,
-             std::shared_ptr<ptsbe::OrderedSamplingStrategy>>(
+  py::class_<ptsbe::OrderedSamplingStrategy, ptsbe::PTSSamplingStrategy>(
       ptsbe, "OrderedSamplingStrategy",
       "Sample trajectories sorted by probability in descending order.")
       .def(py::init<>(), "Create an ordered strategy.");
 
-  py::class_<ptsbe::ExhaustiveSamplingStrategy, ptsbe::PTSSamplingStrategy,
-             std::shared_ptr<ptsbe::ExhaustiveSamplingStrategy>>(
+  py::class_<ptsbe::ExhaustiveSamplingStrategy, ptsbe::PTSSamplingStrategy>(
       ptsbe, "ExhaustiveSamplingStrategy",
       "Enumerate all possible trajectories in lexicographic order.")
       .def(py::init<>(), "Create an exhaustive strategy.");
@@ -231,21 +235,21 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
   // Trace instruction
   py::class_<ptsbe::TraceInstruction>(
       ptsbe, "TraceInstruction", "Single operation in the execution trace.")
-      .def_property_readonly(
+      .def_prop_ro(
           "type", [](const ptsbe::TraceInstruction &self) { return self.type; })
-      .def_property_readonly(
+      .def_prop_ro(
           "name", [](const ptsbe::TraceInstruction &self) { return self.name; })
-      .def_property_readonly("targets",
+      .def_prop_ro("targets",
                              [](const ptsbe::TraceInstruction &self) {
                                return std::vector<std::size_t>(
                                    self.targets.begin(), self.targets.end());
                              })
-      .def_property_readonly("controls",
+      .def_prop_ro("controls",
                              [](const ptsbe::TraceInstruction &self) {
                                return std::vector<std::size_t>(
                                    self.controls.begin(), self.controls.end());
                              })
-      .def_property_readonly("params",
+      .def_prop_ro("params",
                              [](const ptsbe::TraceInstruction &self) {
                                return std::vector<double>(self.params.begin(),
                                                           self.params.end());
@@ -258,17 +262,17 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
   // Kraus selection (cudaq:: namespace)
   py::class_<KrausSelection>(ptsbe, "KrausSelection",
                              "Reference to a single Kraus operator selection.")
-      .def_property_readonly(
+      .def_prop_ro(
           "circuit_location",
           [](const KrausSelection &self) { return self.circuit_location; })
-      .def_property_readonly(
+      .def_prop_ro(
           "kraus_operator_index",
           [](const KrausSelection &self) { return self.kraus_operator_index; })
-      .def_property_readonly(
+      .def_prop_ro(
           "is_error", [](const KrausSelection &self) { return self.is_error; })
-      .def_property_readonly(
+      .def_prop_ro(
           "qubits", [](const KrausSelection &self) { return self.qubits; })
-      .def_property_readonly(
+      .def_prop_ro(
           "op_name", [](const KrausSelection &self) { return self.op_name; })
       .def("__repr__", [](const KrausSelection &self) {
         return "KrausSelection(loc=" + std::to_string(self.circuit_location) +
@@ -280,24 +284,24 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
   py::class_<KrausTrajectory>(
       ptsbe, "KrausTrajectory",
       "Complete specification of one noise trajectory with outcomes.")
-      .def_property_readonly(
+      .def_prop_ro(
           "trajectory_id",
           [](const KrausTrajectory &self) { return self.trajectory_id; })
-      .def_property_readonly(
+      .def_prop_ro(
           "probability",
           [](const KrausTrajectory &self) { return self.probability; })
-      .def_property_readonly(
+      .def_prop_ro(
           "num_shots",
           [](const KrausTrajectory &self) { return self.num_shots; })
-      .def_readonly("multiplicity", &KrausTrajectory::multiplicity,
-                    "Number of times this trajectory was sampled.")
-      .def_readonly("weight", &KrausTrajectory::weight,
-                    "Allocation weight for shot distribution.")
-      .def_property_readonly(
+      .def_ro("multiplicity", &KrausTrajectory::multiplicity,
+              "Number of times this trajectory was sampled.")
+      .def_ro("weight", &KrausTrajectory::weight,
+              "Allocation weight for shot distribution.")
+      .def_prop_ro(
           "kraus_selections",
           [](const KrausTrajectory &self) { return self.kraus_selections; },
-          py::return_value_policy::reference_internal)
-      .def_property_readonly(
+          py::rv_policy::reference_internal)
+      .def_prop_ro(
           "measurement_counts",
           [](const KrausTrajectory &self) { return self.measurement_counts; })
       .def("__repr__", [](const KrausTrajectory &self) {
@@ -311,27 +315,27 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
       ptsbe, "PTSBEExecutionData",
       "Container for PTSBE execution data including circuit structure, "
       "trajectory specifications, and per-trajectory measurement outcomes.")
-      .def_property_readonly(
+      .def_prop_ro(
           "instructions",
           [](const ptsbe::PTSBEExecutionData &self)
               -> const std::vector<ptsbe::TraceInstruction> & {
             return self.instructions;
           },
-          py::return_value_policy::reference_internal)
-      .def_property_readonly(
+          py::rv_policy::reference_internal)
+      .def_prop_ro(
           "trajectories",
           [](const ptsbe::PTSBEExecutionData &self)
               -> const std::vector<cudaq::KrausTrajectory> & {
             return self.trajectories;
           },
-          py::return_value_policy::reference_internal)
+          py::rv_policy::reference_internal)
       .def(
           "count_instructions",
           [](const ptsbe::PTSBEExecutionData &self,
              ptsbe::TraceInstructionType type, py::object name) -> std::size_t {
             std::optional<std::string> nameOpt;
             if (!name.is_none())
-              nameOpt = name.cast<std::string>();
+              nameOpt = py::cast<std::string>(name);
             return self.count_instructions(type, nameOpt);
           },
           py::arg("type"), py::arg("name") = py::none(),
@@ -345,7 +349,7 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
               return nullptr;
             return &result.value().get();
           },
-          py::return_value_policy::reference_internal, py::arg("trajectory_id"),
+          py::rv_policy::reference_internal, py::arg("trajectory_id"),
           "Look up a trajectory by its ID. Returns None if not found.")
       .def("__repr__",
            [](const ptsbe::PTSBEExecutionData &self) {
@@ -362,7 +366,7 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
   py::class_<ptsbe::sample_result, sample_result>(
       ptsbe, "SampleResult",
       "PTSBE sample result with optional execution data.")
-      .def_property_readonly(
+      .def_prop_ro(
           "ptsbe_execution_data",
           [](const ptsbe::sample_result &self)
               -> const ptsbe::PTSBEExecutionData * {
@@ -372,7 +376,7 @@ void cudaq::bindSamplePTSBE(py::module &mod) {
           },
           // reference_internal ties the returned object's lifetime to self,
           // so the pointer into internal data stays valid.
-          py::return_value_policy::reference_internal,
+          py::rv_policy::reference_internal,
           "PTSBE execution data if return_execution_data was True, None "
           "otherwise.")
       .def("has_execution_data", &ptsbe::sample_result::has_execution_data,

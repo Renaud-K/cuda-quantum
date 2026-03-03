@@ -63,8 +63,7 @@ getFuncOpAndCheckResult(mlir::ModuleOp mod, const std::string &shortName) {
 static details::RunResultSpan
 pyRunTheKernel(const std::string &name, quantum_platform &platform,
                mlir::ModuleOp mod, mlir::Type retTy, std::size_t shots_count,
-               std::size_t qpu_id, OpaqueArguments &opaques,
-               bool allowCaching) {
+               std::size_t qpu_id, OpaqueArguments &opaques) {
   if (!name.ends_with(".run"))
     throw std::runtime_error("`cudaq.run` only supports runnable kernels.");
   // Set the `run` attribute on the module to indicate this is a run context
@@ -91,7 +90,7 @@ pyRunTheKernel(const std::string &name, quantum_platform &platform,
         [[maybe_unused]] auto result =
             clean_launch_module(name, mod, retTy, opaques);
       },
-      platform, name, name, shots_count, layoutInfo, qpu_id, allowCaching);
+      platform, name, name, shots_count, layoutInfo, qpu_id);
 
   return results;
 }
@@ -105,10 +104,11 @@ static std::vector<py::object> pyReadResults(details::RunResultSpan results,
 }
 
 /// @brief Run `cudaq::run` on the provided kernel.
-static std::vector<py::object>
-run_impl(const std::string &shortName, MlirModule module, MlirType returnTy,
-         std::size_t shots_count, std::optional<noise_model> noise_model,
-         std::size_t qpu_id, py::args runtimeArgs) {
+static std::vector<py::object> pyRun(const std::string &shortName,
+                                     MlirModule module, MlirType returnTy,
+                                     std::size_t shots_count,
+                                     std::optional<noise_model> noise_model,
+                                     std::size_t qpu_id, py::args runtimeArgs) {
   if (shots_count == 0)
     return {};
 
@@ -124,9 +124,8 @@ run_impl(const std::string &shortName, MlirModule module, MlirType returnTy,
   auto retTy = unwrap(returnTy);
   auto fnOp = getFuncOpAndCheckResult(mod, shortName);
   auto opaques = marshal_arguments_for_module_launch(mod, runtimeArgs, fnOp);
-
   auto span = pyRunTheKernel(shortName, platform, mod, retTy, shots_count,
-                             qpu_id, opaques, true);
+                             qpu_id, opaques);
   auto results = pyReadResults(span, mod, shots_count, shortName);
 
   if (noise_model.has_value())
@@ -207,7 +206,7 @@ static async_run_result run_async_impl(const std::string &shortName,
             platform.set_noise(&noise_model.value());
           try {
             auto span = pyRunTheKernel(name, platform, mod, retTy, shots_count,
-                                       qpu_id, opaques, false);
+                                       qpu_id, opaques);
             sp.set_value(span);
             ep.set_value("");
           } catch (std::runtime_error &e) {
