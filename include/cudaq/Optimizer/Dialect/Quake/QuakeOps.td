@@ -632,7 +632,9 @@ def quake_CallByRefOp : QuakeOp<"call_by_ref", [CallOpInterface]> {
 
   let arguments = (ins
     SymbolRefAttr:$callee,
-    Variadic<AnyType>:$args
+    Variadic<AnyType>:$args,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
   );
   let results = (outs Variadic<AnyType>);
 
@@ -640,15 +642,32 @@ def quake_CallByRefOp : QuakeOp<"call_by_ref", [CallOpInterface]> {
     $callee `(` $args `)` `:` functional-type(operands, results) attr-dict
   }];
 
+  let builders = [
+    OpBuilder<(ins "mlir::SymbolRefAttr":$callee,
+                   "mlir::TypeRange":$results,
+                   "mlir::ValueRange":$args), [{
+      return build($_builder, $_state, results, callee, args, {}, {});
+    }]>
+  ];
+
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
       return {operand_begin(), operand_end()};
     }
-    
+
+    mlir::MutableOperandRange getArgOperandsMutable() {
+      return getArgsMutable();
+    }
+
     mlir::CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<mlir::SymbolRefAttr>(getCalleeAttrName());
+    }
+
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(),
+                       llvm::cast<mlir::SymbolRefAttr>(callee));
     }
   }];
 }

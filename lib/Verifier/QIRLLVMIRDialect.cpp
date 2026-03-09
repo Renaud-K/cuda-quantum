@@ -74,7 +74,7 @@ LogicalResult cudaq::verifier::checkQIRLLVMIRDialect(ModuleOp module,
         func && func->hasAttr(cudaq::kernelAttrName))
       funcs.push_back(func);
 
-  const bool isBaseProfile = profile.startswith("qir-base");
+  const bool isBaseProfile = profile.starts_with("qir-base");
   auto *ctx = module.getContext();
   for (auto func : funcs) {
     auto walkResult = func.walk([&](Operation *op) {
