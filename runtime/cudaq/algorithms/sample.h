@@ -10,9 +10,11 @@
 
 #include "common/ExecutionContext.h"
 #include "common/SampleResult.h"
+#include "common/sample_policy.h"
 #include "cudaq/algorithms/broadcast.h"
 #include "cudaq/concepts.h"
 #include "cudaq/host_config.h"
+#include <utility>
 
 constexpr int DEFAULT_NUM_SHOTS = 1000;
 
@@ -113,11 +115,33 @@ runSampling(KernelFunctor &&wrappedKernel, quantum_platform &platform,
   auto isQuantumDevice =
       !isRemoteSimulator && (platform.is_remote() || platform.is_emulated());
 
+  auto dispatcher = [&platform, &ctx,
+                     qpu_id](KernelFunctor &&wrappedKernel) -> sample_result {
+    platform.with_execution_context(ctx,
+                                    std::forward<KernelFunctor>(wrappedKernel));
+    cudaq::sample_result result;
+    ctx.hybridLaunchKernelApi =
+        [&platform, qpu_id, &result](
+            const char *kernelName, cudaq::KernelThunkType kernel, void *args,
+            std::uint64_t argsSize, std::uint64_t resultOffset,
+            const std::vector<void *> &rawArgs) -> sample_result {
+      const std::string kernName = kernelName;
+      if (platform.is_remote(qpu_id)) {
+        // This path should never call a kernel that returns results.
+        platform.launchKernel(kernName, rawArgs, qpu_id);
+        return {};
+      }
+      result = platform.launchKernel(sample_policy{}, kernName, kernel, args,
+                                     argsSize, resultOffset, rawArgs, qpu_id);
+    };
+
+    return result;
+  };
+
   // Loop until all shots are returned.
   cudaq::sample_result counts;
   while (counts.get_total_shots() < static_cast<std::size_t>(shots)) {
-    platform.with_execution_context(ctx,
-                                    std::forward<KernelFunctor>(wrappedKernel));
+    auto result = dispatcher(std::forward(wrappedKernel));
     if (futureResult) {
       *futureResult = ctx.futureResult;
       return std::nullopt;

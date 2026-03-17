@@ -13,6 +13,7 @@
 #include "SampleResult.h"
 #include "Trace.h"
 #include "common/JIT.h"
+#include "common/ThunkInterface.h"
 #include "cudaq/algorithms/optimizer.h"
 #include "cudaq/operators.h"
 #include <optional>
@@ -168,6 +169,10 @@ public:
   /// use it for multiple discrete calls.
   std::optional<JitEngine> jitEng = std::nullopt;
 
+  std::function<void(const char *kernelName, cudaq::KernelThunkType kernel,
+                          void *args, std::uint64_t argsSize,
+                          std::uint64_t resultOffset,
+                          const std::vector<void *> &rawArgs)> hybridLaunchKernelApi = nullptr;
   /// @endcond
 };
 

@@ -12,7 +12,9 @@
 #include "common/ExecutionContext.h"
 #include "common/NoiseModel.h"
 #include "common/ObserveResult.h"
+#include "common/SampleResult.h"
 #include "common/ThunkInterface.h"
+#include "common/sample_policy.h"
 #include "cudaq/remote_capabilities.h"
 #include "cudaq/utils/cudaq_utils.h"
 #include "nvqpp_interface.h"
@@ -201,6 +203,14 @@ public:
                std::uint64_t resultOffset, const std::vector<void *> &rawArgs,
                std::size_t qpu_id = 0);
   void launchKernel(const std::string &kernelName, const std::vector<void *> &,
+                    std::size_t qpu_id = 0);
+
+  [[nodiscard]] sample_result
+  launchKernel(const sample_policy&, const std::string &kernelName, KernelThunkType kernelFunc,
+               void *args, std::uint64_t voidStarSize,
+               std::uint64_t resultOffset, const std::vector<void *> &rawArgs,
+               std::size_t qpu_id = 0);
+  void launchKernel(const sample_policy&, const std::string &kernelName, const std::vector<void *> &,
                     std::size_t qpu_id = 0);
 
   // This method launches a kernel from a ModuleOp that has already been
