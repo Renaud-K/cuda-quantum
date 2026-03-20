@@ -78,6 +78,7 @@ if [ -z "${llvm_projects##*python-bindings;*}" ]; then
   if [ ! -d "$NANOBIND_INSTALL_PREFIX" ] || [ -z "$(ls -A "$NANOBIND_INSTALL_PREFIX"/* 2> /dev/null)" ]; then
     cd "$this_file_dir" && cd $(git rev-parse --show-toplevel)
     echo "Building nanobind..."
+    git submodule update --init --recursive --recommend-shallow --single-branch tpls/nanobind
     mkdir -p "tpls/nanobind/build" && cd "tpls/nanobind/build"
     cmake -G Ninja ../ -DCMAKE_INSTALL_PREFIX="$NANOBIND_INSTALL_PREFIX" -DNB_TEST=False
     cmake --build . --target install --config Release
