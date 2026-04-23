@@ -83,6 +83,9 @@ static std::string processSimBackendConfig(
   if (!configValue.PlatformQpu.empty())
     output << "PLATFORM_QPU=" << configValue.PlatformQpu << "\n";
 
+  if (!configValue.PlatformQpuType.empty())
+    output << "PLATFORM_QPU_TYPE=" << configValue.PlatformQpuType << "\n";
+
   if (!configValue.PreprocessorDefines.empty()) {
     output << "PREPROCESSOR_DEFINES=\"${PREPROCESSOR_DEFINES}";
 
@@ -339,6 +342,7 @@ void MappingTraits<cudaq::config::BackendEndConfigEntry>::mapping(
   io.mapOptional("library-mode-execution-manager",
                  info.LibraryModeExecutionManager);
   io.mapOptional("platform-qpu", info.PlatformQpu);
+  io.mapOptional("platform-qpu-type", info.PlatformQpuType);
   io.mapOptional("preprocessor-defines", info.PreprocessorDefines);
   io.mapOptional("compiler-flags", info.CompilerFlags);
   io.mapOptional("link-libs", info.LinkLibs);

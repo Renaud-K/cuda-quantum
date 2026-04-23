@@ -711,6 +711,12 @@ if [ -n "${TARGET_CONFIG}" ]; then
 		TARGET_CONFIG="${TARGET_CONFIG}${PLATFORM_EXTRA_ARGS}"
 	    PREPROCESSOR_DEFINES="${PREPROCESSOR_DEFINES} -D NVQPP_TARGET_BACKEND_CONFIG="\"${TARGET_CONFIG}\"""   
 	fi
+
+	# If the target YAML declares a platform-qpu-type, emit it as a
+	# preprocessor define for compile-time QPU type validation.
+	if [ -n "${PLATFORM_QPU_TYPE}" ]; then
+		PREPROCESSOR_DEFINES="${PREPROCESSOR_DEFINES} -D NVQPP_TARGET_QPU_TYPE=${PLATFORM_QPU_TYPE}"
+	fi
 fi
 
 # Configure the NVQIR link line if this is in refactored mode

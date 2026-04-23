@@ -16,6 +16,7 @@
 #include "cudaq/remote_capabilities.h"
 #include "cudaq/utils/cudaq_utils.h"
 #include "nvqpp_interface.h"
+#include <cassert>
 #include <cstring>
 #include <cxxabi.h>
 #include <functional>
@@ -130,6 +131,15 @@ public:
 
   ///  Get the number of QPUs available with this platform.
   std::size_t num_qpus() const { return platformQPUs.size(); }
+
+  /// Assert that the QPU at @p qpu_id is an instance of @p QPUType.
+  template <typename QPUType>
+  void assertQPUType(std::size_t qpu_id = 0) const {
+    validateQpuId(qpu_id);
+    assert(dynamic_cast<QPUType *>(platformQPUs[qpu_id].get()) &&
+           "QPU type mismatch: the platform's QPU does not match the "
+           "expected type for this target.");
+  }
 
   /// Return whether this platform is a simulator.
   bool is_simulator(std::size_t qpu_id = 0) const;
@@ -288,6 +298,24 @@ hybridLaunchKernel(const char *kernelName, KernelThunkType kernel, void *args,
                    std::uint64_t argsSize, std::uint64_t resultOffset,
                    const std::vector<void *> &rawArgs);
 } // extern "C"
+
+/// A thin wrapper around quantum_platform that carries the QPU type as a
+/// compile-time parameter. Obtain one via get_platform<QPUType>(), which
+/// validates the QPU type with a dynamic_cast before returning.
+template <typename QPUType>
+class typed_platform {
+public:
+  explicit typed_platform(quantum_platform &platform) : platform_(platform) {}
+
+  quantum_platform &platform() { return platform_; }
+  const quantum_platform &platform() const { return platform_; }
+
+  std::size_t num_qpus() const { return platform_.num_qpus(); }
+
+private:
+  quantum_platform &platform_;
+};
+
 } // namespace cudaq
 
 #define CONCAT(a, b) CONCAT_INNER(a, b)

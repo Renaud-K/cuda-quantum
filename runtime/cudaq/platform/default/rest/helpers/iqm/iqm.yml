@@ -11,6 +11,7 @@ description: "CUDA-Q target for IQM."
 config:
   # Tell DefaultQuantumPlatform what QPU subtype to use
   platform-qpu: remote_rest
+  platform-qpu-type: cudaq::RemoteRESTQPU
   # Tell NVQ++ to generate glue code to set the target backend name
   gen-target-backend: true
   # Add preprocessor defines to compilation

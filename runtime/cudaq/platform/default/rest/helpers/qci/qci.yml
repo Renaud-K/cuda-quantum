@@ -13,6 +13,7 @@ config:
 
   # Tell DefaultQuantumPlatform to use REST with QCI's endpoints.
   platform-qpu: remote_rest
+  platform-qpu-type: cudaq::RemoteRESTQPU
 
   # Tell NVQ++ to generate glue code to set the target backend name.
   gen-target-backend: true
