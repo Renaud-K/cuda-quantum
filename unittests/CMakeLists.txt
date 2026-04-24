@@ -6,6 +6,24 @@
 # the terms of the Apache License 2.0 which accompanies this distribution.     #
 # ============================================================================ #
 
+function(query_gpu_count result_var)
+  find_program(_NVIDIA_SMI "nvidia-smi")
+  if(_NVIDIA_SMI)
+    execute_process(COMMAND nvidia-smi --list-gpus
+      OUTPUT_VARIABLE _GPU_LIST OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _SMI_RC)
+    if(_SMI_RC EQUAL 0 AND _GPU_LIST)
+      string(REPLACE "\n" ";" _GPU_LINES "${_GPU_LIST}")
+      list(LENGTH _GPU_LINES _NGPUS)
+    else()
+      set(_NGPUS 0)
+    endif()
+  else()
+    set(_NGPUS 0)
+  endif()
+  set(${result_var} ${_NGPUS} PARENT_SCOPE)
+endfunction()
+
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 set (CMAKE_CXX_FLAGS
      "${CMAKE_CXX_FLAGS} -Wno-attributes -Wno-ctad-maybe-unsupported")
@@ -212,13 +230,10 @@ if (cuStateVec_FOUND)
   gtest_discover_tests(test_custatevec_observe_from_sampling TEST_SUFFIX _DirectObserve PROPERTIES ENVIRONMENT "CUDAQ_OBSERVE_FROM_SAMPLING=1" PROPERTIES LABELS "gpu_required" RESOURCE_LOCK "gpu")
 
   if (MPI_CXX_FOUND)
-    # Count the number of GPUs
-    find_program(NVIDIA_SMI "nvidia-smi")
-    if(NVIDIA_SMI)
-      execute_process(COMMAND bash -c "nvidia-smi --list-gpus | wc -l" OUTPUT_VARIABLE NGPUS)
-      # Only build this test if we have more than 1 GPU
-      if (${NGPUS} GREATER_EQUAL 2)
-        add_executable(test_mpi main.cpp mqpu/mpi_mqpu_tester.cpp)
+    query_gpu_count(NGPUS)
+    # Only build this test if we have more than 1 GPU
+    if (${NGPUS} GREATER_EQUAL 2)
+      add_executable(test_mpi main.cpp mqpu/mpi_mqpu_tester.cpp)
         if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT APPLE)
           target_link_options(test_mpi PRIVATE ${CUDAQ_FORCE_LINK_FLAG})
         endif()
@@ -232,7 +247,6 @@ if (cuStateVec_FOUND)
                     "${CMAKE_BINARY_DIR}/unittests/run_mpi.sh" @ONLY)
         add_test(NAME MPITest COMMAND ${MPIEXEC} --allow-run-as-root -np 2 bash ${CMAKE_BINARY_DIR}/unittests/run_mpi.sh)
         set_tests_properties(MPITest PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
-      endif()
     endif()
 
     add_executable(test_gpu_get_state main.cpp gpu/get_state_tester.cu)
@@ -260,27 +274,23 @@ if(TARGET nvqir-tensornet)
   create_tests_with_backend(tensornet-fp32 "")
   create_tests_with_backend(tensornet-mps-fp32 "")
   if (MPI_CXX_FOUND)
-    # Count the number of GPUs
-    find_program(NVIDIA_SMI "nvidia-smi")
-    if(NVIDIA_SMI)
-      execute_process(COMMAND bash -c "nvidia-smi --list-gpus | wc -l" OUTPUT_VARIABLE NGPUS)
-      # Only build this test if we have more than 1 GPUs
-      if (${NGPUS} GREATER_EQUAL 2)
-        message(STATUS "Building cutensornet MPI tests.")
-        add_executable(test_tensornet_mpi mpi/tensornet_mpi_tester.cpp)
-        if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT APPLE)
-          target_link_options(test_tensornet_mpi PRIVATE ${CUDAQ_FORCE_LINK_FLAG})
-        endif()
-        target_link_libraries(test_tensornet_mpi
-            PRIVATE
-            cudaq
-            cudaq-platform-default
-            nvqir-tensornet
-            gtest)
-        add_test(NAME TensornetMPITest COMMAND ${MPIEXEC} --allow-run-as-root -np 2 ${CMAKE_BINARY_DIR}/unittests/test_tensornet_mpi)
-        set_tests_properties(TensornetMPITest PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
-      endif() # NGPUS
-    endif() # NVIDIA_SMI
+    query_gpu_count(NGPUS)
+    # Only build this test if we have more than 1 GPUs
+    if (${NGPUS} GREATER_EQUAL 2)
+      message(STATUS "Building cutensornet MPI tests.")
+      add_executable(test_tensornet_mpi mpi/tensornet_mpi_tester.cpp)
+      if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT APPLE)
+        target_link_options(test_tensornet_mpi PRIVATE ${CUDAQ_FORCE_LINK_FLAG})
+      endif()
+      target_link_libraries(test_tensornet_mpi
+          PRIVATE
+          cudaq
+          cudaq-platform-default
+          nvqir-tensornet
+          gtest)
+      add_test(NAME TensornetMPITest COMMAND ${MPIEXEC} --allow-run-as-root -np 2 ${CMAKE_BINARY_DIR}/unittests/test_tensornet_mpi)
+      set_tests_properties(TensornetMPITest PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
+    endif()
   endif() # MPI_CXX_FOUND
 
   # Test CUDAQ_TENSORNET_OBSERVE_CONTRACT_PATH_REUSE=ON mode (on a few test cases that have cudaq::observe)
@@ -406,39 +416,35 @@ if (CUDA_FOUND AND TARGET nvqir-dynamics)
    cuTensorNet::cuTensorNet
    gtest_main
    )
-  # Count the number of GPUs
-  find_program(NVIDIA_SMI "nvidia-smi")
-  if(NVIDIA_SMI)
-    execute_process(COMMAND bash -c "nvidia-smi --list-gpus | wc -l" OUTPUT_VARIABLE NGPUS)
-    # Only add this test if we have more than 1 GPU
-    if (${NGPUS} GREATER_EQUAL 2)
-      gtest_discover_tests(test_evolve_async PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
+  query_gpu_count(NGPUS)
+  # Only add this test if we have more than 1 GPU
+  if (${NGPUS} GREATER_EQUAL 2)
+    gtest_discover_tests(test_evolve_async PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
 
-      # Multi-GPU batching test: this test needs MPI as well
-      if (MPI_CXX_FOUND)
-        add_executable(test_dynamics_mpi_batching mqpu/dynamics_mpi_batching_tester.cpp)
-        if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT APPLE)
-          target_link_options(test_dynamics_mpi_batching PRIVATE -Wl,--no-as-needed)
-        endif()
-        target_compile_definitions(test_dynamics_mpi_batching PRIVATE -DCUDAQ_ANALOG_TARGET)
-        target_link_libraries(test_dynamics_mpi_batching
-          PRIVATE
-          cudaq-operator
-          cudaq
-          cudaq-platform-mqpu
-          nvqir-dynamics
-          cuDensityMat::cuDensityMat
-          CUDA::cudart
-          CUDA::cublas
-          cuTensor::cuTensor
-          CUDA::cusparse
-          cuTensorNet::cuTensorNet
-          gtest_main
-          )
-
-        add_test(NAME DynamicsMPIBatchingTest COMMAND ${MPIEXEC} --allow-run-as-root -np 2 ${CMAKE_BINARY_DIR}/unittests/test_dynamics_mpi_batching)
-        set_tests_properties(DynamicsMPIBatchingTest PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
+    # Multi-GPU batching test: this test needs MPI as well
+    if (MPI_CXX_FOUND)
+      add_executable(test_dynamics_mpi_batching mqpu/dynamics_mpi_batching_tester.cpp)
+      if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT APPLE)
+        target_link_options(test_dynamics_mpi_batching PRIVATE -Wl,--no-as-needed)
       endif()
+      target_compile_definitions(test_dynamics_mpi_batching PRIVATE -DCUDAQ_ANALOG_TARGET)
+      target_link_libraries(test_dynamics_mpi_batching
+        PRIVATE
+        cudaq-operator
+        cudaq
+        cudaq-platform-mqpu
+        nvqir-dynamics
+        cuDensityMat::cuDensityMat
+        CUDA::cudart
+        CUDA::cublas
+        cuTensor::cuTensor
+        CUDA::cusparse
+        cuTensorNet::cuTensorNet
+        gtest_main
+        )
+
+      add_test(NAME DynamicsMPIBatchingTest COMMAND ${MPIEXEC} --allow-run-as-root -np 2 ${CMAKE_BINARY_DIR}/unittests/test_dynamics_mpi_batching)
+      set_tests_properties(DynamicsMPIBatchingTest PROPERTIES LABELS "gpu_required;mgpus_required" RESOURCE_LOCK "gpu")
     endif()
   endif()
 endif()
