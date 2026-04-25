@@ -7,10 +7,18 @@
  ******************************************************************************/
 
 #include "qpu.h"
+#include "common/ExecutionContext.h"
+#include "common/Timing.h"
+#include "cudaq/operators.h"
+#include "cudaq/qis/execution_manager.h"
+#include "cudaq/qis/qubit_qis.h"
+#include "cudaq/runtime/logger/logger.h"
+#include "cudaq/utils/cudaq_utils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include <cstring>
 
 using namespace cudaq_internal::compiler;
+using namespace cudaq;
 
 CUDAQ_INSTANTIATE_REGISTRY(cudaq::ModuleLauncher::RegistryType)
 
@@ -18,7 +26,7 @@ CUDAQ_INSTANTIATE_REGISTRY(cudaq::ModuleLauncher::RegistryType)
 ///
 /// Handles argument marshaling via `argsCreator` (if not fully specialized) and
 /// result buffer allocation.
-cudaq::KernelThunkResultType
+KernelThunkResultType
 launchCompiledModule(const cudaq::CompiledModule &compiled,
                      const std::vector<void *> &rawArgs) {
   auto funcPtr = compiled.getJit()->getFn();
@@ -28,7 +36,7 @@ launchCompiledModule(const cudaq::CompiledModule &compiled,
     auto argsCreator = compiled.getArgsCreator();
     void *buff = nullptr;
     argsCreator(static_cast<const void *>(rawArgs.data()), &buff);
-    reinterpret_cast<cudaq::KernelThunkResultType (*)(void *, bool)>(funcPtr)(
+    reinterpret_cast<KernelThunkResultType (*)(void *, bool)>(funcPtr)(
         buff, /*client_server=*/false);
     // If the kernel has a result, copy it from the packed buffer into
     // rawArgs.back() (where the caller expects to find it).
@@ -44,8 +52,8 @@ launchCompiledModule(const cudaq::CompiledModule &compiled,
     // Fully specialized with result: rawArgs.back() is the pre-allocated
     // result buffer; pass it directly to the thunk.
     void *buff = const_cast<void *>(rawArgs.back());
-    return reinterpret_cast<cudaq::KernelThunkResultType (*)(void *, bool)>(
-        funcPtr)(buff, /*client_server=*/false);
+    return reinterpret_cast<KernelThunkResultType (*)(void *, bool)>(funcPtr)(
+        buff, /*client_server=*/false);
   }
   // Fully specialized, no result.
   funcPtr();
@@ -53,8 +61,8 @@ launchCompiledModule(const cudaq::CompiledModule &compiled,
 }
 
 cudaq::KernelThunkResultType
-cudaq::QPU::launchModule(const std::string &name, mlir::ModuleOp module,
-                         const std::vector<void *> &rawArgs) {
+QPU::launchModule(const std::string &name, mlir::ModuleOp module,
+                  const std::vector<void *> &rawArgs) {
   auto launcher = registry::get<ModuleLauncher>("default");
   if (!launcher)
     throw std::runtime_error(
@@ -65,10 +73,10 @@ cudaq::QPU::launchModule(const std::string &name, mlir::ModuleOp module,
   return launchCompiledModule(compiled, rawArgs);
 }
 
-cudaq::CompiledModule
-cudaq::QPU::specializeModule(const std::string &name, mlir::ModuleOp module,
-                             const std::vector<void *> &rawArgs,
-                             bool isEntryPoint) {
+CompiledModule QPU::specializeModule(const std::string &name,
+                                     mlir::ModuleOp module,
+                                     const std::vector<void *> &rawArgs,
+                                     bool isEntryPoint) {
   auto launcher = registry::get<ModuleLauncher>("default");
   if (!launcher)
     throw std::runtime_error(
@@ -76,4 +84,53 @@ cudaq::QPU::specializeModule(const std::string &name, mlir::ModuleOp module,
         "result of attempting to use `specializeModule` outside Python.");
   ScopedTraceWithContext(cudaq::TIMING_LAUNCH, "QPU::specializeModule", name);
   return launcher->compileModule(name, module, rawArgs, isEntryPoint);
+}
+
+void QPU::handleObservation(ExecutionContext &context) const {
+  // The reason for the 2 if checks is simply to do a flushGateQueue() before
+  // initiating the trace.
+  bool execute = context.name == "observe";
+  if (execute) {
+    ScopedTraceWithContext(cudaq::TIMING_OBSERVE,
+                           "handleObservation flushGateQueue()");
+    getExecutionManager()->flushGateQueue();
+  }
+  if (execute) {
+    ScopedTraceWithContext(cudaq::TIMING_OBSERVE,
+                           "QPU::handleObservation (after flush)");
+    double sum = 0.0;
+    if (!context.spin.has_value())
+      throw std::runtime_error("[QPU] Observe ExecutionContext specified "
+                               "without a cudaq::spin_op.");
+
+    std::vector<cudaq::ExecutionResult> results;
+    cudaq::spin_op &H = context.spin.value();
+    assert(cudaq::spin_op::canonicalize(H) == H);
+
+    // If the backend supports the observe task, let it compute the
+    // expectation value instead of manually looping over terms, applying
+    // basis change ops, and computing <ZZ..ZZZ>
+    if (context.canHandleObserve) {
+      auto [exp, data] = cudaq::measure(H);
+      context.expectationValue = exp;
+      context.result = data;
+    } else {
+
+      // Loop over each term and compute coeff * <term>
+      for (const auto &term : H) {
+        if (term.is_identity())
+          sum += term.evaluate_coefficient().real();
+        else {
+          // This takes a longer time for the first iteration unless
+          // flushGateQueue() is called above.
+          auto [exp, data] = cudaq::measure(term);
+          results.emplace_back(data.to_map(), term.get_term_id(), exp);
+          sum += term.evaluate_coefficient().real() * exp;
+        }
+      };
+
+      context.expectationValue = sum;
+      context.result = cudaq::sample_result(sum, results);
+    }
+  }
 }

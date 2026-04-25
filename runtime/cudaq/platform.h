@@ -56,11 +56,12 @@ std::string getQIR(const std::string &);
 
 } // namespace cudaq
 
-#ifdef NVQPP_TARGET_QPU_TYPE
 #include "cudaq/platform/qpu_types.h"
+#ifdef NVQPP_TARGET_QPU_TYPE
 namespace cudaq::__internal__ {
 /// Validates that the QPU instantiated by the platform matches the concrete
-/// type expected for this target. Runs during static init, after TargetSetter.
+/// type expected for this target. Runs during static initialization, after
+/// TargetSetter.
 struct QPUTypeValidator {
   QPUTypeValidator() {
     auto *platform = getQuantumPlatformInternal();

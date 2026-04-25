@@ -261,8 +261,6 @@ PTSBatch tracePTSBatch(QuantumKernel &&kernel, Args &&...args) {
   batch.measureQubits = extractMeasureQubits(batch.trace);
   return batch;
 }
-
-/// @brief Return type for asynchronous PTSBE sampling
 using async_sample_result = std::future<sample_result>;
 
 /// @brief Run PTSBE sampling with asynchronous dispatch

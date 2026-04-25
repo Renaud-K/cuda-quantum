@@ -8,18 +8,16 @@
 
 #pragma once
 
-#include "NoiseModel.h"
+#include "common/DeviceCodeRegistry.h"
 #include "common/Environment.h"
 #include "common/ExecutionContext.h"
 #include "common/Executor.h"
 #include "common/ExtraPayloadProvider.h"
 #include "common/Resources.h"
-#include "cudaq.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Support/TargetConfigYaml.h"
-#include "cudaq/platform.h"
+#include "cudaq/platform/platform_utils.h"
 #include "cudaq/platform/qpu.h"
-#include "cudaq/platform/quantum_platform.h"
 #include "cudaq/runtime/logger/logger.h"
 #include "cudaq_internal/compiler/Compiler.h"
 #include "cudaq_internal/compiler/JIT.h"
@@ -37,6 +35,9 @@ bool isUsingResourceCounterSimulator();
 } // namespace nvqir
 
 namespace cudaq {
+void set_random_seed(std::size_t seed);
+std::size_t get_random_seed();
+class noise_model;
 
 class BaseRemoteRESTQPU : public QPU {
 protected:
@@ -315,7 +316,7 @@ public:
       cudaq::ExecutionContext context("tracer");
       context.executionManager = cudaq::getDefaultExecutionManager();
       assert(codes[0].jit);
-      cudaq::get_platform().with_execution_context(
+      cudaq::platform::with_execution_context(
           context, [&]() { codes[0].jit->run(kernelName); });
       executionContext->kernelTrace = std::move(context.kernelTrace);
       return;
@@ -326,7 +327,7 @@ public:
       context.executionManager = cudaq::getDefaultExecutionManager();
       assert(codes.size() == 1 && codes[0].jit && codes[0].resourceCounts);
       nvqir::setResourceCounts(std::move(codes[0].resourceCounts.value()));
-      cudaq::get_platform().with_execution_context(
+      cudaq::platform::with_execution_context(
           context, [&]() { codes[0].jit->run(kernelName); });
       return;
     }
@@ -406,7 +407,7 @@ public:
                     executionContext ? executionContext->warnedNamedMeasurements
                                      : false;
                 assert(codes[i].jit);
-                cudaq::get_platform().with_execution_context(
+                cudaq::platform::with_execution_context(
                     context, [&]() { codes[i].jit->run(kernelName); });
 
                 if (isObserve) {

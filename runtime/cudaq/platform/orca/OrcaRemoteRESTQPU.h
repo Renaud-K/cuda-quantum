@@ -74,10 +74,7 @@ public:
   }
 
   /// @brief Enqueue a quantum task on the asynchronous execution queue.
-  void enqueue(cudaq::QuantumTask &task) override {
-    CUDAQ_INFO("OrcaRemoteRESTQPU: Enqueue Task on QPU {}", qpu_id);
-    execution_queue->enqueue(task);
-  }
+  void enqueue(cudaq::QuantumTask &task) override;
 
   /// @brief Return true if the current backend is a simulator
   bool isSimulator() override { return emulate; }

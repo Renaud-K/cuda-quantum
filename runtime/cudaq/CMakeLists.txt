@@ -19,6 +19,7 @@ add_library(${LIBRARY_NAME}
     algorithms/run.cpp
     algorithms/schedule.cpp
     platform/common/QuantumExecutionQueue.cpp
+    platform/platform_utils.cpp
     platform/qpu.cpp
     platform/qpu_state.cpp
     platform/quantum_platform.cpp
@@ -62,14 +63,14 @@ if (CUDA_FOUND)
       cudaq-common
       cudaq-nlopt
       cudaq-ensmallen
+      cudaq-mlir-runtime-headers
+      cudaq-logger
     PRIVATE
       MLIRIR
       nvqir
-      cudaq-logger
       fmt::fmt-header-only
       CUDA::cudart_static
       CUDAQTargetConfigUtil
-      cudaq-mlir-runtime-headers
   )
 
   target_compile_definitions(${LIBRARY_NAME} PRIVATE CUDAQ_HAS_CUDA)
@@ -87,13 +88,13 @@ else()
       cudaq-common
       cudaq-nlopt
       cudaq-ensmallen
+      cudaq-mlir-runtime-headers
+      cudaq-logger
     PRIVATE
       MLIRIR
       nvqir
-      cudaq-logger
       fmt::fmt-header-only
       CUDAQTargetConfigUtil
-      cudaq-mlir-runtime-headers
   )
 endif()
 

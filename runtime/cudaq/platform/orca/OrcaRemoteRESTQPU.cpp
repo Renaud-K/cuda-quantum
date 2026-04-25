@@ -93,4 +93,9 @@ KernelThunkResultType cudaq::OrcaRemoteRESTQPU::launchKernelCommon(
   return {};
 }
 
+void cudaq::OrcaRemoteRESTQPU::enqueue(cudaq::QuantumTask &task) {
+  CUDAQ_INFO("OrcaRemoteRESTQPU: Enqueue Task on QPU {}", qpu_id);
+  execution_queue->enqueue(task);
+}
+
 CUDAQ_REGISTER_TYPE(QPU, OrcaRemoteRESTQPU, orca)

@@ -10,6 +10,7 @@
 #include "common/AnalogHamiltonian.h"
 #include "common/ArgumentWrapper.h"
 #include "common/Environment.h"
+#include "common/Timing.h"
 #include "cudaq/Optimizer/Builder/Marshal.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CAPI/Dialects.h"
