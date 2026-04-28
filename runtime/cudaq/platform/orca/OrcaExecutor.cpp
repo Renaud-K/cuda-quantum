@@ -8,8 +8,8 @@
 
 #include "OrcaExecutor.h"
 #include "OrcaServerHelper.h"
-#include "cudaq/runtime/logger/logger.h"
 #include "common/RestClient.h"
+#include "cudaq/runtime/logger/logger.h"
 
 namespace cudaq {
 

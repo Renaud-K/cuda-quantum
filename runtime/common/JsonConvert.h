@@ -57,7 +57,7 @@ namespace cudaq {
 // Here, we capture full data (not just bit string statistics) since the remote
 // platform can populate simulator-only data, such as `expectationValue`.
 inline void to_json(json &j, const ExecutionResult &result) {
-  j = json{{"counts", result.counts},
+  j = nlohmann::json{{"counts", result.counts},
            {"registerName", result.registerName},
            {"sequentialData", result.sequentialData}};
   if (result.expectationValue.has_value())
@@ -77,7 +77,7 @@ inline void from_json(const json &j, ExecutionResult &result) {
 
 // `ExecutionContext` serialization.
 inline void to_json(json &j, const ExecutionContext &context) {
-  j = json{{"name", context.name},
+  j = nlohmann::json{{"name", context.name},
            {"shots", context.shots},
            {"hasConditionalsOnMeasureResults",
             context.hasConditionalsOnMeasureResults}};
@@ -140,7 +140,7 @@ inline void to_json(json &j, const ExecutionContext &context) {
   if (context.spin.has_value()) {
     const std::vector<double> spinOpRepr =
         context.spin.value().get_data_representation();
-    j["spin"] = json();
+    j["spin"] = nlohmann::json();
     j["spin"]["data"] = spinOpRepr;
   }
   j["registerNames"] = context.registerNames;
@@ -180,7 +180,7 @@ inline void from_json(const json &j, ExecutionContext &context) {
            context.spin.value());
   }
 
-  if (j.contains("simulationData")) {
+  if (j.contains("simulationData")) { 
     std::vector<std::size_t> stateDim;
     std::vector<std::complex<double>> stateData;
     j["simulationData"]["dim"].get_to(stateDim);

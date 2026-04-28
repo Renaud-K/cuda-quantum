@@ -14,13 +14,12 @@
 #include "common/Executor.h"
 #include "common/ExtraPayloadProvider.h"
 #include "common/Resources.h"
-#include "cudaq/Support/TargetConfigYaml.h"
 #include "cudaq/platform/platform_utils.h"
 #include "cudaq/platform/qpu.h"
+#include "cudaq/platform/qpu_utils.h"
 #include "cudaq/runtime/logger/logger.h"
 #include "cudaq_internal/compiler/Compiler.h"
 #include "cudaq_internal/compiler/JIT.h"
-#include "llvm/Support/Base64.h"
 #include <fstream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -178,10 +177,7 @@ public:
         // No need to decode trivial true/false values
         if (split[i + 1].starts_with("base64_")) {
           split[i + 1].erase(0, 7); // erase "base64_"
-          std::vector<char> decoded_vec;
-          if (auto err = llvm::decodeBase64(split[i + 1], decoded_vec))
-            throw std::runtime_error("DecodeBase64 error");
-          std::string decodedStr(decoded_vec.data(), decoded_vec.size());
+          std::string decodedStr = detail::decodeBase64(split[i + 1]);
           CUDAQ_INFO("Decoded {} parameter from '{}' to '{}'", split[i],
                      split[i + 1], decodedStr);
           backendConfig.insert({split[i], decodedStr});
@@ -203,8 +199,7 @@ public:
     std::ifstream configFile(configFilePath.string());
     std::string configYmlContents((std::istreambuf_iterator<char>(configFile)),
                                   std::istreambuf_iterator<char>());
-    llvm::yaml::Input Input(configYmlContents.c_str());
-    Input >> targetConfig;
+    detail::parseTargetConfigYml(configYmlContents, targetConfig);
 
     // Keep a local copy for capability queries like
     // supportsConditionalFeedback(). The Compiler computes and validates the
@@ -276,7 +271,7 @@ public:
   }
 
   KernelThunkResultType
-  launchModule(const std::string &kernelName, mlir::ModuleOp& module,
+  launchModule(const std::string &kernelName, mlir::ModuleOp &module,
                const std::vector<void *> &rawArgs) override {
     CUDAQ_INFO("launching remote rest kernel via module ({})", kernelName);
 
@@ -297,7 +292,7 @@ public:
   }
 
   CompiledModule specializeModule(const std::string &kernelName,
-                                  mlir::ModuleOp& module,
+                                  mlir::ModuleOp &module,
                                   const std::vector<void *> &rawArgs,
                                   bool isEntryPoint) override {
     CUDAQ_INFO("specializing remote rest kernel via module ({})", kernelName);

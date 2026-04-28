@@ -21,6 +21,7 @@ add_library(${LIBRARY_NAME}
     platform/common/QuantumExecutionQueue.cpp
     platform/platform_utils.cpp
     platform/qpu.cpp
+    platform/qpu_utils.cpp
     platform/qpu_state.cpp
     platform/quantum_platform.cpp
     qis/execution_manager_c_api.cpp

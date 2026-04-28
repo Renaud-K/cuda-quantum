@@ -58,7 +58,7 @@ public:
   }
 
   KernelThunkResultType
-  launchModule(const std::string &kernelName, mlir::ModuleOp& module,
+  launchModule(const std::string &kernelName, mlir::ModuleOp &module,
                const std::vector<void *> &rawArgs) override {
     CUDAQ_INFO("FermioniqBaseQPU launching kernel via module ({})", kernelName);
     launchImpl(kernelName, [&](Compiler &compiler, ExecutionContext *ctx) {

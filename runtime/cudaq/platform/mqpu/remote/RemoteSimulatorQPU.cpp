@@ -15,5 +15,4 @@ cudaq::RemoteSimulatorQPU::RemoteSimulatorQPU() : BaseRemoteSimulatorQPU() {
 
 cudaq::RemoteSimulatorQPU::~RemoteSimulatorQPU() = default;
 
-CUDAQ_REGISTER_TYPE(cudaq::QPU, cudaq::RemoteSimulatorQPU,
-                    RemoteSimulatorQPU)
+CUDAQ_REGISTER_TYPE(cudaq::QPU, cudaq::RemoteSimulatorQPU, RemoteSimulatorQPU)

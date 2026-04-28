@@ -13,9 +13,8 @@
 
 #include "cudaq/platform/default/DefaultQPU.h"
 #include "cudaq/platform/default/rest/RemoteRESTQPU.h"
-//#include "cudaq/platform/fermioniq/FermioniqRestQPU.h"
+#include "cudaq/platform/fermioniq/FermioniqQPU.h"
 #include "cudaq/platform/mqpu/custatevec/GPUEmulatedQPU.h"
-#include "cudaq/platform/mqpu/remote/RemoteSimulatorQPU.h"
 #include "cudaq/platform/orca/OrcaRemoteRESTQPU.h"
 #include "cudaq/platform/pasqal/PasqalRemoteRESTQPU.h"
 #include "cudaq/platform/quera/QuEraRemoteRESTQPU.h"

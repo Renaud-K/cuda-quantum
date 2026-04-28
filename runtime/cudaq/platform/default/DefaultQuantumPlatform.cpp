@@ -26,9 +26,7 @@ using namespace cudaq;
 
 DefaultQPU::~DefaultQPU() = default;
 
-void DefaultQPU::enqueue(QuantumTask &task) {
-  execution_queue->enqueue(task);
-}
+void DefaultQPU::enqueue(QuantumTask &task) { execution_queue->enqueue(task); }
 
 KernelThunkResultType
 DefaultQPU::launchKernel(const std::string &name, KernelThunkType kernelFunc,
@@ -58,9 +56,9 @@ void DefaultQPU::endExecution() {
 }
 
 void DefaultQPU::finalizeExecutionContext(ExecutionContext &context) const {
-  ScopedTraceWithContext(
-      context.name == "observe" ? TIMING_OBSERVE : 0,
-      "DefaultPlatform::finalizeExecutionContext", context.name);
+  ScopedTraceWithContext(context.name == "observe" ? TIMING_OBSERVE : 0,
+                         "DefaultPlatform::finalizeExecutionContext",
+                         context.name);
   handleObservation(context);
 
   getExecutionContext()->executionManager->finalizeExecutionContext(context);

@@ -607,7 +607,7 @@ Compiler::lowerQuakeCode(cudaq::ExecutionContext *executionContext,
 
 std::vector<cudaq::KernelExecution>
 Compiler::lowerQuakeCode(cudaq::ExecutionContext *executionContext,
-                         const std::string &kernelName, mlir::ModuleOp& module,
+                         const std::string &kernelName, mlir::ModuleOp &module,
                          const std::vector<void *> &rawArgs) {
   auto compiled =
       runPassPipeline(executionContext, kernelName, module, rawArgs);

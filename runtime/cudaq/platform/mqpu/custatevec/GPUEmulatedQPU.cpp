@@ -54,8 +54,7 @@ void GPUEmulatedQPU::endExecution() {
   getExecutionContext()->executionManager->endExecution();
 }
 
-void GPUEmulatedQPU::finalizeExecutionContext(
-    ExecutionContext &context) const {
+void GPUEmulatedQPU::finalizeExecutionContext(ExecutionContext &context) const {
   CUDAQ_INFO("MultiQPUPlatform::finalizeExecutionContext QPU {}", qpu_id);
   handleObservation(context);
   getExecutionContext()->executionManager->finalizeExecutionContext(context);

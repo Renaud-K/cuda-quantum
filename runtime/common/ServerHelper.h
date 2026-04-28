@@ -16,9 +16,8 @@
 #include "RuntimeTarget.h"
 #include "SampleResult.h"
 #include "common/RecordLogParser.h"
-#include "nlohmann/json_fwd.hpp"
+#include "cudaq_json.h"
 #include <filesystem>
-#include <memory>
 
 namespace cudaq {
 
@@ -34,13 +33,12 @@ struct KernelExecution {
   std::string code;
   std::optional<cudaq::JitEngine> jit;
   std::optional<Resources> resourceCounts;
-  std::unique_ptr<nlohmann::json> output_names;
+  cudaq::cudaq_json output_names;
   std::vector<std::size_t> mapping_reorder_idx;
-  std::unique_ptr<nlohmann::json> user_data;
+  cudaq::cudaq_json user_data;
   KernelExecution(std::string &n, std::string &c,
                   std::optional<cudaq::JitEngine> jit,
-                  std::optional<Resources> rc, 
-                  std::vector<std::size_t> &m);
+                  std::optional<Resources> rc, std::vector<std::size_t> &m);
   KernelExecution(std::string &n, std::string &c,
                   std::optional<cudaq::JitEngine> jit,
                   std::optional<Resources> rc, nlohmann::json &o,

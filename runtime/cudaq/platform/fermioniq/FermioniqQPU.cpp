@@ -54,7 +54,7 @@ void cudaq::FermioniqQPU::launchImpl(
       obs.push_back(terms);
     }
     user_data["observable"] = obs;
-    codes[0].user_data = std::make_unique<nlohmann::json>(user_data);
+    codes[0].user_data = cudaq::cudaq_json(user_data);
   }
 
   completeLaunchKernel(kernelName, std::move(codes));

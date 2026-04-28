@@ -149,7 +149,7 @@ public:
   // any way necessary without breaking some other kernel launch.
   std::vector<cudaq::KernelExecution>
   lowerQuakeCode(cudaq::ExecutionContext *executionContext,
-                 const std::string &kernelName, mlir::ModuleOp& module,
+                 const std::string &kernelName, mlir::ModuleOp &module,
                  const std::vector<void *> &rawArgs);
 };
 } // namespace cudaq_internal::compiler
