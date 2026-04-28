@@ -7,8 +7,52 @@
  ******************************************************************************/
 
 #include "ServerHelper.h"
+#include "nlohmann/json.hpp"
 
 namespace cudaq {
+
+KernelExecution::KernelExecution(std::string &n, std::string &c,
+                                 std::optional<cudaq::JitEngine> jit,
+                                 std::optional<Resources> rc,
+                                 std::vector<std::size_t> &m)
+    : name(n), code(c), jit(jit), resourceCounts(rc),
+      mapping_reorder_idx(m) {}
+KernelExecution::KernelExecution(std::string &n, std::string &c,
+                                 std::optional<cudaq::JitEngine> jit,
+                                 std::optional<Resources> rc, nlohmann::json &o,
+                                 std::vector<std::size_t> &m)
+    : name(n), code(c), jit(jit), resourceCounts(rc),
+      output_names(std::make_unique<nlohmann::json>(o)),
+      mapping_reorder_idx(m) {}
+KernelExecution::KernelExecution(std::string &n, std::string &c,
+                                 std::optional<cudaq::JitEngine> jit,
+                                 std::optional<Resources> rc, nlohmann::json &o,
+                                 std::vector<std::size_t> &m,
+                                 nlohmann::json &ud)
+    : name(n), code(c), jit(jit), resourceCounts(rc),
+      output_names(std::make_unique<nlohmann::json>(o)), mapping_reorder_idx(m),
+      user_data(std::make_unique<nlohmann::json>(ud)) {}
+
+KernelExecution::~KernelExecution() = default;
+KernelExecution::KernelExecution(KernelExecution &&) noexcept = default;
+KernelExecution &KernelExecution::operator=(KernelExecution &&) noexcept =
+    default;
+
+KernelExecution::KernelExecution(const KernelExecution &other)
+    : name(other.name), code(other.code), jit(other.jit),
+      resourceCounts(other.resourceCounts),
+      output_names(other.output_names
+                       ? std::make_unique<nlohmann::json>(*other.output_names)
+                       : nullptr),
+      mapping_reorder_idx(other.mapping_reorder_idx),
+      user_data(other.user_data
+                    ? std::make_unique<nlohmann::json>(*other.user_data)
+                    : nullptr) {}
+
+KernelExecution &KernelExecution::operator=(const KernelExecution &other) {
+  return *this = KernelExecution(other);
+}
+
 void ServerHelper::parseConfigForCommonParams(const BackendConfig &config) {
   // Parse common parameters for each job and place into member variables
   for (auto &[key, val] : config) {

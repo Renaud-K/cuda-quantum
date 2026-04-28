@@ -9,6 +9,7 @@
 #include "OrcaServerHelper.h"
 #include "common/Future.h"
 #include "common/Registry.h"
+#include "nlohmann/json.hpp"
 #include "cudaq/runtime/logger/logger.h"
 #include "orca_qpu.h"
 

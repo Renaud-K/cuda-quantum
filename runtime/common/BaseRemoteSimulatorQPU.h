@@ -129,18 +129,18 @@ public:
   }
 
   KernelThunkResultType
-  launchModule(const std::string &name, mlir::ModuleOp module,
+  launchModule(const std::string &name, mlir::ModuleOp moduleOp,
                const std::vector<void *> &rawArgs) override {
     std::string fullName = cudaq::runtime::cudaqGenPrefixName + name;
-    auto funcOp = module.lookupSymbol<mlir::func::FuncOp>(fullName);
+    auto funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>(fullName);
     auto resTy = cudaq::runtime::getReturnType(funcOp);
     if (resTy) {
       // Looks very much like launchKernel(string, vector<ptr>*).
       return launchKernelImpl(name, nullptr, rawArgs.back(), 0, 0, &rawArgs,
-                              module);
+                              moduleOp);
     }
     // Looks very much like launchKernel(string, vector<ptr>*).
-    return launchKernelImpl(name, nullptr, nullptr, 0, 0, &rawArgs, module);
+    return launchKernelImpl(name, nullptr, nullptr, 0, 0, &rawArgs, moduleOp);
   }
 
   CompiledModule specializeModule(const std::string &kernelName,

@@ -6,8 +6,58 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#include "FermioniqRestQPU.h"
+#include "FermioniqQPU.h"
+#include "nlohmann/json.hpp"
+#include <memory>
 
-cudaq::FermioniqRestQPU::~FermioniqRestQPU() = default;
+cudaq::FermioniqQPU::~FermioniqQPU() = default;
 
-CUDAQ_REGISTER_TYPE(cudaq::QPU, cudaq::FermioniqRestQPU, fermioniq)
+void cudaq::FermioniqQPU::launchImpl(
+    const std::string &kernelName,
+    std::function<std::vector<KernelExecution>(Compiler &, ExecutionContext *)>
+        lower) {
+  auto *executionContext = getExecutionContext();
+  // TODO future iterations of this should support non-void return types.
+  if (!executionContext)
+    throw std::runtime_error(
+        "Remote rest execution can only be performed via cudaq::sample(), "
+        "cudaq::observe(), or cudaq::contrib::draw().");
+
+  // When the user issues an observe call, we don't want to use the default
+  // CUDA-Q behaviour that splits up the circuit into several ansatz
+  // sub circuit. Instead, we pass a "sample" context to the compiler to
+  // prevent circuit splitting. This target handles observable evaluation
+  // server-side.
+  cudaq::ExecutionContext sampleContext("sample", 1);
+  ExecutionContext *compileCtx =
+      (executionContext->name == "observe") ? &sampleContext : executionContext;
+
+  Compiler compiler(serverHelper.get(), backendConfig, targetConfig, noiseModel,
+                    emulate);
+  auto codes = lower(compiler, compileCtx);
+
+  if (codes.size() != 1)
+    throw std::runtime_error("Provider only allows 1 circuit at a time.");
+
+  if (executionContext->name == "observe") {
+    auto spin = executionContext->spin.value();
+    auto user_data = nlohmann::json::object();
+    auto obs = nlohmann::json::array();
+    for (const auto &term : spin) {
+      auto terms = nlohmann::json::array();
+      terms.push_back(term.get_term_id());
+      auto coeff = term.evaluate_coefficient();
+      auto coeff_str = cudaq_fmt::format("{}{}{}j", coeff.real(),
+                                         coeff.imag() < 0.0 ? "-" : "+",
+                                         std::fabs(coeff.imag()));
+      terms.push_back(coeff_str);
+      obs.push_back(terms);
+    }
+    user_data["observable"] = obs;
+    codes[0].user_data = std::make_unique<nlohmann::json>(user_data);
+  }
+
+  completeLaunchKernel(kernelName, std::move(codes));
+}
+
+CUDAQ_REGISTER_TYPE(cudaq::QPU, cudaq::FermioniqQPU, fermioniq)

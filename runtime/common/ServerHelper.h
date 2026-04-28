@@ -16,8 +16,9 @@
 #include "RuntimeTarget.h"
 #include "SampleResult.h"
 #include "common/RecordLogParser.h"
-#include "nlohmann/json.hpp"
+#include "nlohmann/json_fwd.hpp"
 #include <filesystem>
+#include <memory>
 
 namespace cudaq {
 
@@ -33,21 +34,26 @@ struct KernelExecution {
   std::string code;
   std::optional<cudaq::JitEngine> jit;
   std::optional<Resources> resourceCounts;
-  nlohmann::json output_names;
+  std::unique_ptr<nlohmann::json> output_names;
   std::vector<std::size_t> mapping_reorder_idx;
-  nlohmann::json user_data;
+  std::unique_ptr<nlohmann::json> user_data;
+  KernelExecution(std::string &n, std::string &c,
+                  std::optional<cudaq::JitEngine> jit,
+                  std::optional<Resources> rc, 
+                  std::vector<std::size_t> &m);
   KernelExecution(std::string &n, std::string &c,
                   std::optional<cudaq::JitEngine> jit,
                   std::optional<Resources> rc, nlohmann::json &o,
-                  std::vector<std::size_t> &m)
-      : name(n), code(c), jit(jit), resourceCounts(rc), output_names(o),
-        mapping_reorder_idx(m) {}
+                  std::vector<std::size_t> &m);
   KernelExecution(std::string &n, std::string &c,
                   std::optional<cudaq::JitEngine> jit,
                   std::optional<Resources> rc, nlohmann::json &o,
-                  std::vector<std::size_t> &m, nlohmann::json &ud)
-      : name(n), code(c), jit(jit), resourceCounts(rc), output_names(o),
-        mapping_reorder_idx(m), user_data(ud) {}
+                  std::vector<std::size_t> &m, nlohmann::json &ud);
+  ~KernelExecution();
+  KernelExecution(const KernelExecution &other);
+  KernelExecution &operator=(const KernelExecution &other);
+  KernelExecution(KernelExecution &&) noexcept;
+  KernelExecution &operator=(KernelExecution &&) noexcept;
 };
 
 /// @brief Responses / Submissions to the Server are modeled via JSON

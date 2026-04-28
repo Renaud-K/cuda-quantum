@@ -45,9 +45,8 @@ public:
     std::string name = kernelName;
     char *charArgs = (char *)(args);
     std::string strArgs = charArgs;
-    nlohmann::json j;
     std::vector<std::size_t> mapping_reorder_idx;
-    codes.emplace_back(name, strArgs, std::nullopt, std::nullopt, j,
+    codes.emplace_back(name, strArgs, std::nullopt, std::nullopt,
                        mapping_reorder_idx);
 
     if (executionContext) {

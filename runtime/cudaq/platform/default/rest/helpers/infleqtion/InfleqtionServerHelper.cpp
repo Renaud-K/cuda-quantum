@@ -189,7 +189,7 @@ InfleqtionServerHelper::createJob(std::vector<KernelExecution> &circuitCodes) {
 
   // Store output names and reorder indices if necessary
   OutputNamesType outputNamesMap;
-  for (auto &item : circuitCode.output_names.items()) {
+  for (auto &item : circuitCode.output_names->items()) {
     std::size_t idx = std::stoul(item.key());
     ResultInfoType info;
     info.qubitNum = idx;
