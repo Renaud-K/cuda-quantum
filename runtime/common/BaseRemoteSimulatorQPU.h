@@ -129,7 +129,7 @@ public:
   }
 
   KernelThunkResultType
-  launchModule(const std::string &name, mlir::ModuleOp moduleOp,
+  launchModule(const std::string &name, mlir::ModuleOp& moduleOp,
                const std::vector<void *> &rawArgs) override {
     std::string fullName = cudaq::runtime::cudaqGenPrefixName + name;
     auto funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>(fullName);
@@ -144,7 +144,7 @@ public:
   }
 
   CompiledModule specializeModule(const std::string &kernelName,
-                                  mlir::ModuleOp module,
+                                  mlir::ModuleOp& module,
                                   const std::vector<void *> &rawArgs,
                                   bool isEntryPoint) override {
     CUDAQ_INFO("specializing remote simulator kernel via module ({})",

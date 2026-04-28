@@ -12,6 +12,8 @@
 #include <optional>
 
 namespace cudaq {
+static constexpr const char cudaqAHKPrefixName[] =
+    "__analog_hamiltonian_kernel__";
 
 /// @brief Base QPU class for analog platforms like `quera` and `pasqal`.
 /// Provides common functionality and implementation.
@@ -32,7 +34,7 @@ public:
                const std::vector<void *> &rawArgs) override {
     auto executionContext = cudaq::getExecutionContext();
 
-    if (kernelName.find(cudaq::runtime::cudaqAHKPrefixName) != 0)
+    if (kernelName.find(cudaq::cudaqAHKPrefixName) != 0)
       throw std::runtime_error(
           "Arbitrary kernel execution is not supported on this target.");
 

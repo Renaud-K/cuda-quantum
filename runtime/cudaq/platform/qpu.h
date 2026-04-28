@@ -147,11 +147,11 @@ public:
                const std::vector<void *> &rawArgs) = 0;
 
   [[nodiscard]] virtual KernelThunkResultType
-  launchModule(const std::string &name, mlir::ModuleOp module,
+  launchModule(const std::string &name, mlir::ModuleOp& module,
                const std::vector<void *> &rawArgs);
 
   [[nodiscard]] virtual CompiledModule
-  specializeModule(const std::string &name, mlir::ModuleOp module,
+  specializeModule(const std::string &name, mlir::ModuleOp& module,
                    const std::vector<void *> &rawArgs, bool isEntryPoint);
 
   /// @brief Notify the QPU that a new random seed value is set.
@@ -165,7 +165,7 @@ struct ModuleLauncher : public registry::RegisteredType<ModuleLauncher> {
   /// Compile (specialize + JIT) a kernel module and return a ready-to-execute
   /// CompiledModule.
   virtual CompiledModule compileModule(const std::string &name,
-                                       mlir::ModuleOp module,
+                                       mlir::ModuleOp& module,
                                        const std::vector<void *> &rawArgs,
                                        bool isEntryPoint) = 0;
 };

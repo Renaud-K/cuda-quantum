@@ -61,7 +61,7 @@ launchCompiledModule(const cudaq::CompiledModule &compiled,
 }
 
 cudaq::KernelThunkResultType
-QPU::launchModule(const std::string &name, mlir::ModuleOp module,
+QPU::launchModule(const std::string &name, mlir::ModuleOp& module,
                   const std::vector<void *> &rawArgs) {
   auto launcher = registry::get<ModuleLauncher>("default");
   if (!launcher)
@@ -74,7 +74,7 @@ QPU::launchModule(const std::string &name, mlir::ModuleOp module,
 }
 
 CompiledModule QPU::specializeModule(const std::string &name,
-                                     mlir::ModuleOp module,
+                                     mlir::ModuleOp& module,
                                      const std::vector<void *> &rawArgs,
                                      bool isEntryPoint) {
   auto launcher = registry::get<ModuleLauncher>("default");

@@ -302,7 +302,7 @@ static void precountResources(ModuleOp module) {
 
 namespace {
 struct PythonLauncher : public cudaq::ModuleLauncher {
-  cudaq::CompiledModule compileModule(const std::string &name, ModuleOp module,
+  cudaq::CompiledModule compileModule(const std::string &name, ModuleOp& module,
                                       const std::vector<void *> &rawArgs,
                                       bool isEntryPoint) override {
 

@@ -14,7 +14,6 @@
 #include "common/Executor.h"
 #include "common/ExtraPayloadProvider.h"
 #include "common/Resources.h"
-#include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Support/TargetConfigYaml.h"
 #include "cudaq/platform/platform_utils.h"
 #include "cudaq/platform/qpu.h"
@@ -277,7 +276,7 @@ public:
   }
 
   KernelThunkResultType
-  launchModule(const std::string &kernelName, mlir::ModuleOp module,
+  launchModule(const std::string &kernelName, mlir::ModuleOp& module,
                const std::vector<void *> &rawArgs) override {
     CUDAQ_INFO("launching remote rest kernel via module ({})", kernelName);
 
@@ -298,7 +297,7 @@ public:
   }
 
   CompiledModule specializeModule(const std::string &kernelName,
-                                  mlir::ModuleOp module,
+                                  mlir::ModuleOp& module,
                                   const std::vector<void *> &rawArgs,
                                   bool isEntryPoint) override {
     CUDAQ_INFO("specializing remote rest kernel via module ({})", kernelName);
