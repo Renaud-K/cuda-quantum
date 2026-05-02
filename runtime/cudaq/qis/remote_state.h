@@ -11,6 +11,8 @@
 #include "common/SimulationState.h"
 #include "cudaq/builder/kernel_builder.h"
 #include "cudaq/utils/cudaq_utils.h"
+#include "cudaq/utils/owning_ptr.h"
+
 namespace cudaq {
 /// Implementation of `SimulationState` for remote simulator backends.
 // The state is represented by a quantum kernel.
@@ -25,7 +27,7 @@ protected:
   // e.g., to be evaluated at amplitude accessor APIs (const APIs, hence needs
   // to be mutable) or overlap calculation with another remote state (combining
   // the IR of both states for remote evaluation)
-  mutable std::unique_ptr<cudaq::SimulationState> state;
+  mutable cudaq::owning_ptr<cudaq::SimulationState> state;
   // Cache log messages from the remote execution.
   // Mutable to support lazy execution during `const` API calls.
   mutable std::string platformExecutionLog;

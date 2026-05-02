@@ -11,6 +11,8 @@
 #include "common/PluginUtils.h"
 #include "cudaq/algorithms/policy_cpos.h"
 #include "cudaq/algorithms/policy_dispatch.h"
+#include "cudaq/qis/state.h"
+#include "execution_manager_iface.h"
 
 using namespace cudaq;
 
@@ -44,4 +46,23 @@ void ExecutionManager::finalizeExecutionContext(ExecutionContext &ctx) {
         [&](sample_result &&r) { ctx.result = std::move(r); },
         [&](policies::void_result &&r) {});
   });
+}
+
+void ExecutionManager::initializeState(const std::vector<QuditInfo> &targets,
+                                       const state &state) {
+  initializeState(targets, state.internal.get());
+}
+
+std::size_t
+cudaq::execution_manager_iface::allocateQudit(std::size_t quditLevels) {
+  return getExecutionManager()->allocateQudit(quditLevels);
+}
+
+void cudaq::execution_manager_iface::returnQudit(const QuditInfo &q) {
+  return getExecutionManager()->returnQudit(q);
+}
+
+void cudaq::execution_manager_iface::initializeState(
+    const std::vector<QuditInfo> &targets, const state &state) {
+  getExecutionManager()->initializeState(targets, state);
 }

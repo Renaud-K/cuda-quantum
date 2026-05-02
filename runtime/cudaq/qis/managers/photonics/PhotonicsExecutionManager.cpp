@@ -7,10 +7,12 @@
  ******************************************************************************/
 #include "common/FmtCore.h"
 #include "common/SampleResult.h"
+#include "common/SimulationState.h"
 #include "cudaq/operators.h"
 #include "cudaq/qis/managers/BasicExecutionManager.h"
 #include "cudaq/runtime/logger/logger.h"
 #include "cudaq/utils/cudaq_utils.h"
+#include "cudaq/utils/owning_ptr.h"
 #include "qpp.h"
 #include <cmath>
 #include <complex>
@@ -219,8 +221,9 @@ protected:
                                            collapsed_state.size());
       }
 
-      ctx.simulationState =
-          std::make_unique<cudaq::PhotonicsState>(std::move(state), levels);
+      ctx.simulationState = cudaq::owning_ptr<cudaq::SimulationState>(
+          std::make_unique<cudaq::PhotonicsState>(std::move(state), levels)
+              .release());
     }
   }
 

@@ -15,6 +15,7 @@
 #include "cudaq/algorithms/policies.h"
 #include "cudaq/host_config.h"
 #include "cudaq/operators.h"
+#include "execution_manager_iface.h"
 #include <deque>
 #include <string_view>
 #include <vector>
@@ -23,17 +24,6 @@ namespace cudaq {
 class ExecutionContext;
 class SimulationState;
 using SpinMeasureResult = std::pair<double, sample_result>;
-
-/// A QuditInfo is a type encoding the number of \a levels and the \a id of the
-/// qudit to the ExecutionManager.
-struct QuditInfo {
-  std::size_t levels = 0;
-  std::size_t id = 0;
-  QuditInfo(std::size_t _levels, std::size_t _id) : levels(_levels), id(_id) {}
-  bool operator==(const QuditInfo &other) const {
-    return levels == other.levels && id == other.id;
-  }
-};
 
 extern "C" {
 bool __nvqpp__MeasureResultBoolConversion(int);
@@ -144,6 +134,9 @@ public:
                                const SimulationState &state) {
     initializeState(targets, &state);
   }
+
+  void initializeState(const std::vector<QuditInfo> &targets,
+                       const state &state);
 
   /// Apply the quantum instruction with the given name, on the provided target
   /// qudits. Supports input of control qudits and rotational parameters. Can

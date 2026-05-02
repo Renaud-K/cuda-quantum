@@ -11,6 +11,7 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <cudensitymat.h>
+#include <memory>
 
 namespace cudaq::dynamics {
 /// @brief Class representing the CUDAQ context for density matrix operations.

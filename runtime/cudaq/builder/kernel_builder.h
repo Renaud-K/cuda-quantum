@@ -10,6 +10,7 @@
 
 #include "cudaq/builder/QuakeValue.h"
 #include "cudaq/host_config.h"
+#include "cudaq/operators.h"
 #include "cudaq/qis/modifiers.h"
 #include "cudaq/qis/qvector.h"
 #include "cudaq/utils/cudaq_utils.h"

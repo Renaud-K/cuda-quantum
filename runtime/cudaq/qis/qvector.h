@@ -11,6 +11,7 @@
 #include "cudaq/host_config.h"
 #include "cudaq/qis/qview.h"
 #include "cudaq/qis/state.h"
+#include "execution_manager_iface.h"
 
 namespace cudaq {
 
@@ -48,7 +49,7 @@ public:
     for (auto &q : qudits)
       targets.emplace_back(QuditInfo{Levels, q.id()});
     // Note: the internal state data will be cloned by the simulator backend.
-    getExecutionManager()->initializeState(targets, state.internal.get());
+    cudaq::execution_manager_iface::initializeState(targets, state);
   }
   qvector(const state *ptr) : qvector(*ptr) {}
   qvector(state *ptr) : qvector(*ptr) {}

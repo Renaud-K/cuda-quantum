@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "execution_manager.h"
+#include "execution_manager_iface.h"
 
 namespace cudaq {
 
@@ -29,12 +29,12 @@ class qudit {
 
 public:
   /// Construct a qudit, will allocated a new unique index
-  qudit() : idx(getExecutionManager()->allocateQudit(n_levels())) {}
+  qudit() : idx(cudaq::execution_manager_iface::allocateQudit(n_levels())) {}
 
   qudit(const state &state) : qudit() {
     // Note: the internal state data will be cloned by the simulator backend.
     std::vector<QuditInfo> v{QuditInfo{Levels, id()}};
-    getExecutionManager()->initializeState(v, state.internal.get());
+    cudaq::execution_manager_iface::initializeState(v, state);
   }
   qudit(const state *s) : qudit(*s) {}
   qudit(state *s) : qudit(const_cast<const state *>(s)) {}
@@ -67,7 +67,7 @@ public:
   qudit<Levels> &operator!() { return negate(); }
 
   // Destructor, return the qudit so it can be reused
-  ~qudit() { getExecutionManager()->returnQudit({n_levels(), idx}); }
+  ~qudit() { cudaq::execution_manager_iface::returnQudit({n_levels(), idx}); }
 };
 
 // A qubit is a qudit with 2 levels.

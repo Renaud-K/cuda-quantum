@@ -200,11 +200,17 @@ inline void from_json(const json &j, ExecutionContext &context) {
         // before loading the state vector.
         std::vector<std::complex<float>> converted(stateData.begin(),
                                                    stateData.end());
-        context.simulationState = simulator->createStateFromData(
-            std::make_pair(converted.data(), stateDim[0]));
+        context.simulationState = cudaq::owning_ptr<cudaq::SimulationState>(
+            simulator
+                ->createStateFromData(
+                    std::make_pair(converted.data(), stateDim[0]))
+                .release());
       } else {
-        context.simulationState = simulator->createStateFromData(
-            std::make_pair(stateData.data(), stateDim[0]));
+        context.simulationState = cudaq::owning_ptr<cudaq::SimulationState>(
+            simulator
+                ->createStateFromData(
+                    std::make_pair(stateData.data(), stateDim[0]))
+                .release());
       }
     } else if (!stateData.empty()) {
       throw std::runtime_error(

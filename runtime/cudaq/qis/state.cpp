@@ -9,6 +9,7 @@
 #include "state.h"
 #include "common/EigenDense.h"
 #include "cudaq/simulators.h"
+#include "cudaq/utils/owning_ptr.h"
 #include <iostream>
 
 namespace {
@@ -164,5 +165,13 @@ state *__nvqpp_cudaq_state_createFromData_f32(float *d, std::size_t size) {
 }
 
 void __nvqpp_cudaq_state_delete(state *obj) { delete obj; }
+}
+
+// Out-of-line definition of the deleter for owning_ptr<ServerHelper>;
+// defined here where ServerHelper is complete so headers holding an
+// owning_ptr<ServerHelper> do not need to see the full type.
+template <>
+void opaque_deleter<SimulationState>::operator()(SimulationState *p) const {
+  delete p;
 }
 } // namespace cudaq

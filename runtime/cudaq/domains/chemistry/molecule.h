@@ -9,6 +9,7 @@
 #pragma once
 
 #include "cudaq/operators.h"
+#include <memory>
 
 namespace cudaq {
 
