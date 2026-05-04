@@ -20,6 +20,15 @@ inline quantum_platform &get_platform() {
   return *getQuantumPlatformInternal();
 }
 
+/// @brief Return a typed view of the quantum platform after validating that
+/// the QPU at index 0 is an instance of @p QPUType.
+template <typename QPUType>
+typed_platform<QPUType> get_platform() {
+  auto &platform = get_platform();
+  platform.assertQPUType<QPUType>();
+  return typed_platform<QPUType>(platform);
+}
+
 /// @brief Return the number of QPUs (at runtime)
 inline std::size_t platform_num_qpus() {
   return getQuantumPlatformInternal()->num_qpus();
@@ -46,3 +55,22 @@ inline bool is_emulated_platform() {
 std::string getQIR(const std::string &);
 
 } // namespace cudaq
+
+#include "cudaq/platform/qpu_types.h"
+#if 0
+#ifdef NVQPP_TARGET_QPU_TYPE
+namespace cudaq::__internal__ {
+/// Validates that the QPU instantiated by the platform matches the concrete
+/// type expected for this target. Runs during static initialization, after
+/// TargetSetter.
+struct QPUTypeValidator {
+  QPUTypeValidator() {
+    auto *platform = getQuantumPlatformInternal();
+    if (platform->num_qpus() > 0)
+      platform->assertQPUType<NVQPP_TARGET_QPU_TYPE>();
+  }
+};
+inline QPUTypeValidator qpuTypeValidator;
+} // namespace cudaq::__internal__
+#endif
+#endif

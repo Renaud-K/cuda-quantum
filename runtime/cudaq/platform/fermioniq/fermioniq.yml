@@ -11,6 +11,7 @@ description: "CUDA-Q target for Fermioniq."
 config:
   # Tell DefaultQuantumPlatform what QPU subtype to use
   platform-qpu: fermioniq
+  platform-qpu-type: cudaq::FermioniqRestQPU
   # Tell NVQ++ to generate glue code to set the target backend name
   gen-target-backend: true
   # Add preprocessor defines to compilation

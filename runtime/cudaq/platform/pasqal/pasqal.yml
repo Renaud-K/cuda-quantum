@@ -11,6 +11,7 @@ description: "CUDA-Q target for pasqal."
 config:
   # Tell DefaultQuantumPlatform what QPU subtype to use
   platform-qpu: pasqal
+  platform-qpu-type: cudaq::PasqalRemoteRESTQPU
   # Add the pasqal-qpu library to the link list
   link-libs: ["-lcudaq-pasqal-qpu", "-lcudaq-serverhelper-pasqal"]
   # Allow evolve API in C++
