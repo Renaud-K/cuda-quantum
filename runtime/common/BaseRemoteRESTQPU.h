@@ -8,19 +8,20 @@
 
 #pragma once
 
-#include "NoiseModel.h"
 #include "common/Environment.h"
 #include "common/ExecutionContext.h"
 #include "common/Executor.h"
-#include "common/ExtraPayloadProvider.h"
+#include "common/KernelExecution.h"
 #include "common/Resources.h"
-#include "cudaq.h"
-#include "cudaq/platform.h"
+#include "cudaq/Support/TargetConfig.h"
+#include "cudaq/platform/platform_iface.h"
 #include "cudaq/platform/qpu.h"
 #include "cudaq/platform/qpu_utils.h"
 #include "cudaq/runtime/logger/logger.h"
+#include "cudaq/utils/cudaq_utils.h"
 #include "cudaq_internal/compiler/Compiler.h"
 #include "cudaq_internal/compiler/JIT.h"
+#include <filesystem>
 #include <fstream>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -47,6 +48,9 @@ extern "C" bool cudaq_has_executor(const char *name);
 #endif
 
 namespace cudaq {
+void set_random_seed(std::size_t seed);
+std::size_t get_random_seed();
+class noise_model;
 
 class BaseRemoteRESTQPU : public QPU {
 protected:
@@ -68,9 +72,9 @@ protected:
   // Pointer to the concrete Executor for this QPU
   std::unique_ptr<cudaq::Executor> executor;
 
-  /// @brief Pointer to the concrete ServerHelper, provides
+  /// @brief Pointer to the forward declared ServerHelper, provides
   /// specific JSON payloads and POST/GET URL paths.
-  std::unique_ptr<cudaq::ServerHelper> serverHelper;
+  cudaq::owning_ptr<cudaq::ServerHelper> serverHelper;
 
   /// @brief Mapping of general key-values for backend configuration.
   std::map<std::string, std::string> backendConfig;
@@ -276,7 +280,7 @@ public:
           "Remote rest execution can only be performed via cudaq::sample(), "
           "cudaq::observe(), cudaq::run(), or cudaq::contrib::draw().");
 
-    auto [module, context] = Compiler::loadQuakeCodeByName(kernelName);
+    auto [moduleOp, context] = Compiler::loadQuakeCodeByName(kernelName);
 
     // Get the Quake code, lowered according to config file.
     // FIXME: For python, we reach here with rawArgs being empty and args having
@@ -286,9 +290,9 @@ public:
                       noiseModel, emulate);
     auto codes = rawArgs.empty()
                      ? compiler.lowerQuakeCode(executionContext, kernelName,
-                                               module, args, {})
+                                               moduleOp, args, {})
                      : compiler.lowerQuakeCode(executionContext, kernelName,
-                                               module, nullptr, rawArgs);
+                                               moduleOp, nullptr, rawArgs);
     completeLaunchKernel(kernelName, std::move(codes));
 
     // NB: Kernel should/will never return dynamic results.
@@ -337,7 +341,7 @@ public:
       cudaq::ExecutionContext context("tracer");
       context.executionManager = cudaq::getDefaultExecutionManager();
       assert(codes[0].jit);
-      cudaq::get_platform().with_execution_context(
+      cudaq::platform::with_execution_context(
           context, [&]() { codes[0].jit->run(kernelName); });
       executionContext->kernelTrace = std::move(context.kernelTrace);
       return;
@@ -348,7 +352,7 @@ public:
       context.executionManager = cudaq::getDefaultExecutionManager();
       assert(codes.size() == 1 && codes[0].jit && codes[0].resourceCounts);
       nvqir::setResourceCounts(std::move(codes[0].resourceCounts.value()));
-      cudaq::get_platform().with_execution_context(
+      cudaq::platform::with_execution_context(
           context, [&]() { codes[0].jit->run(kernelName); });
       return;
     }
@@ -428,7 +432,7 @@ public:
                     executionContext ? executionContext->warnedNamedMeasurements
                                      : false;
                 assert(codes[i].jit);
-                cudaq::get_platform().with_execution_context(
+                cudaq::platform::with_execution_context(
                     context, [&]() { codes[i].jit->run(kernelName); });
 
                 if (isObserve) {

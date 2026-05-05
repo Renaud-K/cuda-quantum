@@ -6,19 +6,9 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
-#include "common/AnalogRemoteRESTQPU.h"
+#include "QuEraRemoteRESTQPU.h"
 
-namespace {
-
-/// @brief The `QuEraRemoteRESTQPU` is a subtype of QPU that enables the
-/// execution of Analog Hamiltonian Program via a REST Client.
-class QuEraRemoteRESTQPU : public cudaq::AnalogRemoteRESTQPU {
-public:
-  QuEraRemoteRESTQPU() : AnalogRemoteRESTQPU() {}
-  QuEraRemoteRESTQPU(QuEraRemoteRESTQPU &&) = delete;
-  virtual ~QuEraRemoteRESTQPU() = default;
-};
-} // namespace
+cudaq::QuEraRemoteRESTQPU::~QuEraRemoteRESTQPU() = default;
 
 #ifdef CUDAQ_PYTHON_EXTENSION
 extern "C" void cudaq_add_qpu_node(void *node_ptr);

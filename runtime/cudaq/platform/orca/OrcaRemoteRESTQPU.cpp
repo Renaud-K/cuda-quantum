@@ -7,8 +7,9 @@
  ******************************************************************************/
 
 #include "OrcaRemoteRESTQPU.h"
+#include "common/ServerHelper.h"
 #include "cudaq/runtime/logger/logger.h"
-#include "nlohmann/json.hpp"
+#include "orca_qpu.h"
 #include "llvm/Support/Base64.h"
 
 #ifdef CUDAQ_PYTHON_EXTENSION
@@ -100,6 +101,11 @@ KernelThunkResultType cudaq::OrcaRemoteRESTQPU::launchKernelCommon(
 
   // TODO: support dynamic result types.
   return {};
+}
+
+void cudaq::OrcaRemoteRESTQPU::enqueue(cudaq::QuantumTask &task) {
+  CUDAQ_INFO("OrcaRemoteRESTQPU: Enqueue Task on QPU {}", qpu_id);
+  execution_queue->enqueue(task);
 }
 
 void cudaq::OrcaRemoteRESTQPU::launchKernel(const std::string &,

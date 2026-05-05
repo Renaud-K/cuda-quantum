@@ -15,6 +15,7 @@
 #include <set>
 #include <spdlog/cfg/env.h>
 #include <spdlog/cfg/helpers.h>
+#include <spdlog/common.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/spdlog.h>
@@ -117,6 +118,9 @@ static_assert(static_cast<int>(LogLevel::info) ==
               "log level enum mismatch");
 static_assert(static_cast<int>(LogLevel::warn) ==
                   static_cast<int>(spdlog::level::warn),
+              "log level enum mismatch");
+static_assert(static_cast<int>(LogLevel::error) ==
+                  static_cast<int>(spdlog::level::err),
               "log level enum mismatch");
 bool should_log(const LogLevel logLevel) {
   return spdlog::should_log(static_cast<spdlog::level::level_enum>(logLevel));
