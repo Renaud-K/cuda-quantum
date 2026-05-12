@@ -51,7 +51,7 @@ void applyNoiseImpl(const std::tuple<RotationT...> &paramTuple,
   if (channel.empty())
     return;
 
-  getExecutionManager()->applyNoise(channel, qubits);
+  cudaq::execution_manager::applyNoise(channel, qubits);
 }
 } // namespace cudaq::details
 
@@ -96,7 +96,7 @@ void apply_noise(const std::vector<double> &params, Q &&...args) {
   // warning generated, no channel application.
   if (channel.empty())
     return;
-  getExecutionManager()->applyNoise(channel, qubits);
+  cudaq::execution_manager::applyNoise(channel, qubits);
 }
 
 class kraus_channel;

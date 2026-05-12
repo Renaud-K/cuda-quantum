@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "cudaq/builder/kernel_builder.h"
+#include "cudaq/builder/kernel_builder_base.h"
 #include "cudaq/platform/qpu_types.h"
 #include "cudaq/platform/quantum_platform.h"
 

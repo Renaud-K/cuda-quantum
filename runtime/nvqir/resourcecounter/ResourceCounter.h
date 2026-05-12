@@ -10,7 +10,6 @@
 
 #include "common/Resources.h"
 #include "nvqir/CircuitSimulator.h"
-#include "nvqir/Gates.h"
 
 namespace nvqir {
 

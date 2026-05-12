@@ -18,6 +18,7 @@
 #include "cudaq/Optimizer/Dialect/Quake/QuakeOps.h"
 #include "cudaq/Optimizer/Transforms/Passes.h"
 #include "cudaq/platform/nvqpp_interface.h"
+#include "cudaq/qis/state.h"
 #include "cudaq/runtime/logger/logger.h"
 #include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "cudaq_internal/compiler/TracePassInstrumentation.h"

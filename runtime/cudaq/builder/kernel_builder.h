@@ -8,8 +8,10 @@
 
 #pragma once
 
+#include "cudaq/builder/kernel_builder_base.h"
 #include "cudaq/builder/QuakeValue.h"
 #include "cudaq/host_config.h"
+#include "cudaq/operators.h"
 #include "cudaq/qis/modifiers.h"
 #include "cudaq/qis/pauli_word.h"
 #include "cudaq/qis/qvector.h"
@@ -359,21 +361,6 @@ void *getArgPointer(T *arg) {
     return *arg;
   return arg;
 }
-
-/// @brief The `kernel_builder_base` provides a base type for the templated
-/// kernel builder so that we can get a single handle on an instance within the
-/// runtime.
-class kernel_builder_base {
-public:
-  virtual std::string to_quake() const = 0;
-  virtual void jitCode(std::vector<std::string> extraLibPaths = {}) = 0;
-  virtual ~kernel_builder_base() = default;
-
-  /// @brief Write the kernel_builder to the given output stream. This outputs
-  /// the Quake representation.
-  friend std::ostream &operator<<(std::ostream &stream,
-                                  const kernel_builder_base &builder);
-};
 
 } // namespace details
 

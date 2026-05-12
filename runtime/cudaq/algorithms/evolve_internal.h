@@ -16,6 +16,7 @@
 #include "cudaq/platform.h"
 #include "cudaq/platform/QuantumExecutionQueue.h"
 #include "cudaq/schedule.h"
+#include "cudaq/qis/qvector.h"
 
 namespace cudaq {
 class base_integrator;

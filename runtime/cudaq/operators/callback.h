@@ -9,7 +9,6 @@
 #pragma once
 
 #include "cudaq/operators/matrix.h"
-#include "cudaq/qis/state.h"
 
 #include <complex>
 #include <functional>

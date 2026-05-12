@@ -28,6 +28,7 @@ private:
   friend class qvector;
   template <std::size_t>
   friend class qudit;
+  friend class ExecutionManager;
   friend class state_helper;
 
 public:

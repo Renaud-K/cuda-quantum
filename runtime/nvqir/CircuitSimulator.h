@@ -14,12 +14,14 @@
 #include "common/NoiseModel.h"
 #include "common/QuditIdTracker.h"
 #include "common/SampleResult.h"
+#include "common/SimulationState.h"
 #include "common/Timing.h"
 #include "cudaq/algorithms/policies.h"
 #include "cudaq/algorithms/policy_cpos.h"
 #include "cudaq/algorithms/policy_dispatch.h"
 #include "cudaq/host_config.h"
 #include "cudaq/runtime/logger/logger.h"
+#include "cudaq/utils/owning_ptr.h"
 #include <concepts>
 #include <cstdarg>
 #include <cstddef>
@@ -1069,17 +1071,8 @@ protected:
 
     // Set the state data if requested.
     if (context.name == "extract-state") {
-      context.simulationState = getSimulationState();
-      // State is no longer valid, so clean up
-      deallocateState();
-    }
-
-    if (context.name == "msm_size") {
-      context.msm_dimensions = generateMSMSize();
-    }
-
-    if (context.name == "msm") {
-      generateMSM();
+      context.simulationState = cudaq::owning_ptr<cudaq::SimulationState>(
+          getSimulationState().release());
     }
   }
 

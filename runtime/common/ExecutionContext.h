@@ -14,6 +14,7 @@
 #include "SampleResult.h"
 #include "Trace.h"
 #include "cudaq/algorithms/optimizer.h"
+#include "cudaq/utils/owning_ptr.h"
 #include "cudaq/operators.h"
 #include <optional>
 #include <string_view>
@@ -83,7 +84,7 @@ public:
   async_result<sample_result> asyncResult;
 
   /// @brief Pointer to simulation-specific simulation data.
-  std::unique_ptr<SimulationState> simulationState;
+  cudaq::owning_ptr<SimulationState> simulationState;
 
   /// @brief A map of basis-state amplitudes
   // The list of basis state is set before kernel launch and the map is filled
