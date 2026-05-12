@@ -56,8 +56,7 @@ jobs:
           for pr_number in $(jq -r '.[].number' "$tmpdir/prs.json"); do
             files="$(gh pr view "$pr_number"               --repo "$upstream_repo"               --json files               --jq '.files[].path')"
 
-            matched_files="$(printf '%s
-' "$files" | awk -v dir="$watch_dir/" 'index($0, dir) == 1')"
+            matched_files="$(printf '%s' "$files" | awk -v dir="$watch_dir/" 'index($0, dir) == 1')"
 
             if [[ -n "$matched_files" ]]; then
               title="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .title' "$tmpdir/prs.json")"
@@ -72,8 +71,7 @@ jobs:
                 echo "- Updated: $updated_at"
                 echo "- Watched path: \`$watch_dir/\`"
                 echo "- Matching files:"
-                printf '%s
-' "$matched_files" | sed 's/^/  - `/' | sed 's/$/`/'
+                printf '%s' "$matched_files" | sed 's/^/  - `/' | sed 's/$/`/'
                 echo ""
               } >> "$matches_md"
             fi
