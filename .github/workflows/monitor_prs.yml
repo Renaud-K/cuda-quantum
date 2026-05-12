@@ -1,0 +1,140 @@
+name: Monitor upstream PRs for directory changes
+
+on:
+  schedule:
+    # Runs every 6 hours.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      directory:
+        description: "Directory prefix to monitor in the upstream repo"
+        required: false
+        default: "runtime/internal"
+      upstream_repo:
+        description: "Upstream owner/repo to monitor"
+        required: false
+        default: "NVIDIA/cuda-quantum"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor-upstream-prs
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    env:
+      UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'NVIDIA/cuda-quantum' }}
+      WATCH_DIRECTORY: ${{ github.event.inputs.directory || 'runtime/internal' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Find upstream PRs touching watched directory
+        id: scan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          watch_dir="${WATCH_DIRECTORY%/}"
+          upstream_repo="$UPSTREAM_REPO"
+
+          echo "Scanning open PRs in $upstream_repo for changes under $watch_dir/"
+
+          tmpdir="$(mktemp -d)"
+          matches_md="$tmpdir/matches.md"
+          touch "$matches_md"
+
+          # Fetch open PRs. Increase --limit if the upstream repo routinely has >100 open PRs.
+          gh pr list             --repo "$upstream_repo"             --state open             --limit 100             --json number,title,url,author,updatedAt             > "$tmpdir/prs.json"
+
+          count="$(jq length "$tmpdir/prs.json")"
+          echo "Found $count open PRs."
+
+          for pr_number in $(jq -r '.[].number' "$tmpdir/prs.json"); do
+            files="$(gh pr view "$pr_number"               --repo "$upstream_repo"               --json files               --jq '.files[].path')"
+
+            matched_files="$(printf '%s
+' "$files" | awk -v dir="$watch_dir/" 'index($0, dir) == 1')"
+
+            if [[ -n "$matched_files" ]]; then
+              title="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .title' "$tmpdir/prs.json")"
+              url="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .url' "$tmpdir/prs.json")"
+              author="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .author.login' "$tmpdir/prs.json")"
+              updated_at="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .updatedAt' "$tmpdir/prs.json")"
+
+              {
+                echo "### [#$pr_number - $title]($url)"
+                echo ""
+                echo "- Author: @$author"
+                echo "- Updated: $updated_at"
+                echo "- Watched path: \`$watch_dir/\`"
+                echo "- Matching files:"
+                printf '%s
+' "$matched_files" | sed 's/^/  - `/' | sed 's/$/`/'
+                echo ""
+              } >> "$matches_md"
+            fi
+          done
+
+          if [[ -s "$matches_md" ]]; then
+            {
+              echo "found=true"
+              echo "body<<EOF"
+              cat "$matches_md"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write GitHub Actions summary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          {
+            echo "# Upstream PR directory monitor"
+            echo ""
+            echo "- Upstream repo: \`${UPSTREAM_REPO}\`"
+            echo "- Watched directory: \`${WATCH_DIRECTORY%/}/\`"
+            echo "- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "${{ steps.scan.outputs.found }}" == "true" ]]; then
+            {
+              echo "## Matches found"
+              echo ""
+              echo "${{ steps.scan.outputs.body }}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## No matches found"
+              echo ""
+              echo "No currently open upstream PRs touch \`${WATCH_DIRECTORY%/}/\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Trigger GitHub notification on match
+        if: steps.scan.outputs.found == 'true'
+        shell: bash
+        run: |
+          cat <<'EOF'
+          Matching upstream PRs were found.
+
+          This step intentionally fails so GitHub can send a workflow-failed
+          notification email according to your GitHub notification settings.
+
+          Open the workflow run summary to see the matching PRs and files.
+          EOF
+
+          exit 1
+
+      - name: No matches found
+        if: steps.scan.outputs.found == 'false'
+        shell: bash
+        run: |
+          echo "No open upstream PRs currently touch ${WATCH_DIRECTORY%/}/"
