@@ -28,7 +28,7 @@ jobs:
 
     env:
       UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'NVIDIA/cuda-quantum' }}
-      WATCH_DIRECTORY: ${{ github.event.inputs.directory || 'runtime/internal' }}
+      WATCH_DIRECTORY: ${{ github.event.inputs.directory || 'runtime' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -48,13 +48,21 @@ jobs:
           touch "$matches_md"
 
           # Fetch open PRs. Increase --limit if the upstream repo routinely has >100 open PRs.
-          gh pr list             --repo "$upstream_repo"             --state open             --limit 100             --json number,title,url,author,updatedAt             > "$tmpdir/prs.json"
+          since="$(date -u -d '6 hours ago' '+%Y-%m-%dT%H:%M:%SZ')"
+
+          gh pr list \
+            --repo "$upstream_repo" \
+            --state open \
+            --limit 100 \
+            --search "updated:>=$since" \
+            --json number,title,url,author,updatedAt \
+            > "$tmpdir/prs.json"
 
           count="$(jq length "$tmpdir/prs.json")"
           echo "Found $count open PRs."
 
           for pr_number in $(jq -r '.[].number' "$tmpdir/prs.json"); do
-            files="$(gh pr view "$pr_number"               --repo "$upstream_repo"               --json files               --jq '.files[].path')"
+            files="$(gh pr view "$pr_number" --repo "$upstream_repo" --json files --jq '.files[].path')"
 
             matched_files="$(printf '%s' "$files" | awk -v dir="$watch_dir/" 'index($0, dir) == 1')"
 
