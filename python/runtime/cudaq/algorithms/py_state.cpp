@@ -11,10 +11,10 @@
 #include "common/ArgumentWrapper.h"
 #include "common/FmtCore.h"
 #include "common/KernelArgs.h"
-#include "cudaq/algorithms/get_state.h"
-#include "cudaq/runtime/logger/logger.h"
 #include "runtime/cudaq/platform/py_alt_launch_kernel.h"
 #include "utils/OpaqueArguments.h"
+#include "cudaq/algorithms/get_state.h"
+#include "cudaq/runtime/logger/logger.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include <nanobind/ndarray.h>
 
@@ -171,9 +171,10 @@ static std::vector<int> bitStringToIntVec(const std::string &bitString) {
 
 /// @brief Run `cudaq::get_state` on the provided kernel and spin operator.
 static state get_state_impl(const std::string &shortName, MlirModule mod,
+                            cudaq::CompiledModule *compiled,
                             nanobind::args args) {
   auto closure = [=]() {
-    return marshal_and_launch_module(shortName, mod, args);
+    return marshal_and_launch_module(shortName, mod, args, compiled);
   };
   return details::extractState(std::move(closure));
 }
@@ -491,9 +492,8 @@ void cudaq::bindPyState(nanobind::module_ &mod, LinkedLibraryHolder &holder) {
           "from_data",
           [&](nanobind::object data) {
             // Reject Python sequences (list/tuple) overload — they should be
-            // dispatched to the vector overload below. In pybind11, py::buffer
-            // excluded lists; nanobind::object accepts anything, so we must
-            // guard explicitly.
+            // dispatched to the vector overload below.
+            // nanobind::object accepts anything, so we must guard explicitly.
             if (nanobind::isinstance<nanobind::list>(data) ||
                 nanobind::isinstance<nanobind::tuple>(data))
               throw nanobind::next_overload();
@@ -842,7 +842,7 @@ index pair.
   mod.def(
       "get_state_impl",
       [&](const std::string &shortName, MlirModule module,
-          nanobind::args args) {
+          cudaq::CompiledModule *compiled, nanobind::args args) {
         // Check for unsupported cases.
         if (holder.getTarget().name == "orca-photonics")
           throw std::runtime_error(
@@ -850,7 +850,7 @@ index pair.
 
         if (is_remote_platform() || is_emulated_platform())
           return pyGetStateQPU(shortName, module, args);
-        return get_state_impl(shortName, module, args);
+        return get_state_impl(shortName, module, compiled, args);
       },
       "See the python documentation for get_state.");
 

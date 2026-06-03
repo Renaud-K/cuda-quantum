@@ -9,11 +9,11 @@
 #include "LinkedLibraryHolder.h"
 #include "common/FmtCore.h"
 #include "common/PluginUtils.h"
-#include "cudaq/Support/TargetConfigYaml.h"
+#include "nvqir/CircuitSimulator.h"
+#include "cudaq/Target/TargetConfigYaml.h"
 #include "cudaq/platform/quantum_platform.h"
 #include "cudaq/runtime/logger/logger.h"
 #include "cudaq/target_control.h"
-#include "nvqir/CircuitSimulator.h"
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -524,22 +524,6 @@ std::vector<RuntimeTarget> LinkedLibraryHolder::getTargets() const {
   for (auto &[name, target] : targets)
     ret.emplace_back(target);
   return ret;
-}
-
-void python::detail::switchToResourceCounterSimulator() {
-  nvqir::switchToResourceCounterSimulator();
-}
-
-void python::detail::stopUsingResourceCounterSimulator() {
-  nvqir::stopUsingResourceCounterSimulator();
-}
-
-void python::detail::setChoiceFunction(std::function<bool()> choice) {
-  nvqir::setChoiceFunction(choice);
-}
-
-Resources *python::detail::getResourceCounts() {
-  return nvqir::getResourceCounts();
 }
 
 std::string python::getTransportLayer(LinkedLibraryHolder *holder) {
