@@ -61,6 +61,9 @@ getCompileTarget(cudaq::ExecutionContext *context) {
   bool isLocalSimulator =
       !(cudaq::is_remote_platform() || cudaq::is_emulated_platform());
 
+  if (isLocalSimulator)
+    ct->pipelineConfig.skipTargetLoweringPipeline = true;
+
   ct->fullySpecialize = !isLocalSimulator;
   ct->supportDeviceCalls = true;
   ct->emitResourceCounts = context && context->name == "resource-count";
