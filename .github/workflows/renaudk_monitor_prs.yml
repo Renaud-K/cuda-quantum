@@ -89,7 +89,9 @@ jobs:
                 echo "- Updated: $updated_at"
                 echo "- Watched paths: \`$watch_dirs\`"
                 echo "- Matching files:"
-                printf '%s' "$matched_files" | sed 's/^/  - `/' | sed 's/$/`/'
+                while IFS= read -r file; do
+                  echo "  - \`$file\`"
+                done <<< "$matched_files"
                 echo ""
               } >> "$matches_md"
             fi
@@ -106,7 +108,7 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Write GitHub Actions summary
+       - name: Write GitHub Actions summary
         shell: bash
         run: |
           set -euo pipefail
