@@ -70,11 +70,12 @@ jobs:
               dir_path="${dir%/}/"
               dir_matches="$(printf '%s' "$files" | awk -v dir="$dir_path" 'index($0, dir) == 1' || true)"
               if [[ -n "$dir_matches" ]]; then
-                matched_files="${matched_files}${dir_matches}"$'\n'
+                matched_files="$(printf '%s\n%s' "$matched_files" "$dir_matches")"
               fi
             done
 
-            matched_files="$(echo "$matched_files" | sort -u | grep -v '^$' || true)"
+            # Remove leading/trailing whitespace and duplicates
+            matched_files="$(echo "$matched_files" | sed '/^[[:space:]]*$/d' | sort -u || true)"
 
             if [[ -n "$matched_files" ]]; then
               title="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .title' "$tmpdir/prs.json")"
@@ -89,9 +90,11 @@ jobs:
                 echo "- Updated: $updated_at"
                 echo "- Watched paths: \`$watch_dirs\`"
                 echo "- Matching files:"
-                while IFS= read -r file; do
-                  echo "  - \`$file\`"
-                done <<< "$matched_files"
+                echo "$matched_files" | while IFS= read -r file; do
+                  if [[ -n "$file" ]]; then
+                    echo "  - \`$file\`"
+                  fi
+                done
                 echo ""
               } >> "$matches_md"
             fi
