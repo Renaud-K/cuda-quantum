@@ -68,10 +68,13 @@ jobs:
             matched_files=""
             for dir in $(echo "$watch_dirs" | tr ',' '\n'); do
               dir_path="${dir%/}/"
-              matched_files="$(printf '%s' "$files" | awk -v dir="$dir_path" 'index($0, dir) == 1'; echo "$matched_files")"
+              dir_matches="$(printf '%s' "$files" | awk -v dir="$dir_path" 'index($0, dir) == 1' || true)"
+              if [[ -n "$dir_matches" ]]; then
+                matched_files="${matched_files}${dir_matches}"$'\n'
+              fi
             done
 
-            matched_files="$(echo "$matched_files" | sort -u | grep -v '^$')"
+            matched_files="$(echo "$matched_files" | sort -u | grep -v '^$' || true)"
 
             if [[ -n "$matched_files" ]]; then
               title="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .title' "$tmpdir/prs.json")"
