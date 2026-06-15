@@ -6,10 +6,10 @@ on:
     - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
-      directory:
-        description: "Directory prefix to monitor in the upstream repo"
+      directories:
+        description: "Comma-separated directory prefixes to monitor in the upstream repo"
         required: false
-        default: "runtime/internal"
+        default: "runtime,unittests"
       upstream_repo:
         description: "Upstream owner/repo to monitor"
         required: false
@@ -28,20 +28,20 @@ jobs:
 
     env:
       UPSTREAM_REPO: ${{ github.event.inputs.upstream_repo || 'NVIDIA/cuda-quantum' }}
-      WATCH_DIRECTORY: ${{ github.event.inputs.directory || 'runtime' }}
+      WATCH_DIRECTORIES: ${{ github.event.inputs.directories || 'runtime,unittests' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Find upstream PRs touching watched directory
+      - name: Find upstream PRs touching watched directories
         id: scan
         shell: bash
         run: |
           set -euo pipefail
 
-          watch_dir="${WATCH_DIRECTORY%/}"
+          watch_dirs="${WATCH_DIRECTORIES}"
           upstream_repo="$UPSTREAM_REPO"
 
-          echo "Scanning open PRs in $upstream_repo for changes under $watch_dir/"
+          echo "Scanning open PRs in $upstream_repo for changes under: $watch_dirs"
 
           tmpdir="$(mktemp -d)"
           matches_md="$tmpdir/matches.md"
@@ -64,7 +64,14 @@ jobs:
           for pr_number in $(jq -r '.[].number' "$tmpdir/prs.json"); do
             files="$(gh pr view "$pr_number" --repo "$upstream_repo" --json files --jq '.files[].path')"
 
-            matched_files="$(printf '%s' "$files" | awk -v dir="$watch_dir/" 'index($0, dir) == 1')"
+            # Check if any file matches any of the watched directories
+            matched_files=""
+            for dir in $(echo "$watch_dirs" | tr ',' '\n'); do
+              dir_path="${dir%/}/"
+              matched_files="$(printf '%s' "$files" | awk -v dir="$dir_path" 'index($0, dir) == 1'; echo "$matched_files")"
+            done
+
+            matched_files="$(echo "$matched_files" | sort -u | grep -v '^$')"
 
             if [[ -n "$matched_files" ]]; then
               title="$(jq -r --argjson n "$pr_number" '.[] | select(.number == $n) | .title' "$tmpdir/prs.json")"
@@ -77,7 +84,7 @@ jobs:
                 echo ""
                 echo "- Author: @$author"
                 echo "- Updated: $updated_at"
-                echo "- Watched path: \`$watch_dir/\`"
+                echo "- Watched paths: \`$watch_dirs\`"
                 echo "- Matching files:"
                 printf '%s' "$matched_files" | sed 's/^/  - `/' | sed 's/$/`/'
                 echo ""
@@ -105,7 +112,7 @@ jobs:
             echo "# Upstream PR directory monitor"
             echo ""
             echo "- Upstream repo: \`${UPSTREAM_REPO}\`"
-            echo "- Watched directory: \`${WATCH_DIRECTORY%/}/\`"
+            echo "- Watched directories: \`${WATCH_DIRECTORIES}\`"
             echo "- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
@@ -120,7 +127,7 @@ jobs:
             {
               echo "## No matches found"
               echo ""
-              echo "No currently open upstream PRs touch \`${WATCH_DIRECTORY%/}/\`."
+              echo "No currently open upstream PRs touch \`${WATCH_DIRECTORIES}\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -143,4 +150,4 @@ jobs:
         if: steps.scan.outputs.found == 'false'
         shell: bash
         run: |
-          echo "No open upstream PRs currently touch ${WATCH_DIRECTORY%/}/"
+          echo "No open upstream PRs currently touch ${WATCH_DIRECTORIES}"
