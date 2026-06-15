@@ -108,7 +108,7 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-       - name: Write GitHub Actions summary
+      - name: Write GitHub Actions summary
         shell: bash
         run: |
           set -euo pipefail
