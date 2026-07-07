@@ -6,13 +6,15 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
+// clang-format off
 // REQUIRES: nvcc
 
 // RUN: (nvcc -c -Xcompiler -fPIC %p/cuda-1.cu -o %t.o && \
-// RUN: nvq++ --enable-mlir %s %t.o -L `dirname $(which nvcc)`/../lib64 -lcudart -o %t && echo "Success") | \
+// RUN: nvq++ %s %t.o -L `dirname $(which nvcc)`/../lib64 -lcudart -o %t && echo "Success") | \
 // RUN: FileCheck %s
 
 // CHECK-LABEL: Success
+// clang-format on
 
 #include <cudaq.h>
 
@@ -24,9 +26,7 @@ struct CUDA_Quantum_Kernel {
   }
 };
 
-void cudaq_kernel() {
-  CUDA_Quantum_Kernel{}();
-}
+void cudaq_kernel() { CUDA_Quantum_Kernel{}(); }
 
 void cuda_gpu_kernel();
 
