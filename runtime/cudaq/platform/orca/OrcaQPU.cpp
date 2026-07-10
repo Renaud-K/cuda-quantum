@@ -26,7 +26,7 @@ cudaq::sample_result runSampling(TBIParameters &parameters,
         "orca_launch", nullptr, &parameters, sizeof(TBIParameters), 0);
   });
 
-  return ctx.result;
+  return ctx.result_old;
 }
 
 async_sample_result runAsyncSampling(TBIParameters &parameters,

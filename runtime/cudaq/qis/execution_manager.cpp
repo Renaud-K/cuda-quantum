@@ -62,10 +62,9 @@ void ExecutionManager::finalizeExecutionContext(ExecutionContext &ctx) {
   policies::withPolicy(ctx.name, [&](auto policy) {
     policies::visitResult(
         [&]() { return cudaq::finalize_execution_manager(*this, policy, ctx); },
-        [&](sample_result &&r) { ctx.result = std::move(r); },
+        [&](sample_result &&r) { assert(false); },
         [&](observe_result &&r) {
-          ctx.result = r.raw_data();
-          ctx.expectationValue = r.expectation();
+          assert(false);
         },
         [&](policies::void_result &&r) {});
   });

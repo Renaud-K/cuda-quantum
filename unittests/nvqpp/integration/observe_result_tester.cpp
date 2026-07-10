@@ -12,6 +12,7 @@
 // Rotational gates not supported in Stim.
 #ifndef CUDAQ_BACKEND_STIM
 
+namespace {
 struct deuteron_n3_ansatz {
   void operator()(double x0, double x1) __qpu__ {
     cudaq::qvector q(3);
@@ -25,6 +26,7 @@ struct deuteron_n3_ansatz {
     x<cudaq::ctrl>(q[1], q[0]);
   }
 };
+}
 
 CUDAQ_TEST(ObserveResult, checkSimple) {
 

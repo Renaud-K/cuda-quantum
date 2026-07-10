@@ -79,7 +79,7 @@ public:
   std::optional<cudaq::spin_op> spin;
 
   /// @brief Measurement counts for a CUDA-Q kernel invocation
-  sample_result result;
+  sample_result result_old;
 
   /// @brief A computed expectation value
   std::optional<double> expectationValue = std::nullopt;

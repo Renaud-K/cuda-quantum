@@ -399,7 +399,7 @@ CUDAQ_TEST(NVQIRTester, checkNisqMechanics) {
   });
   // Back to library code
 
-  cudaq::sample_result counts = ctx.result;
+  cudaq::sample_result counts = ctx.result_old;
   int counter = 0;
   for (auto &[bits, count] :
        counts) { // std::size_t i = 0; i < counts_data.size(); i += 3) {
@@ -461,7 +461,7 @@ CUDAQ_TEST(NVQIRTester, checkQubitAllocationFromStateVec) {
   });
   // Back to library code
 
-  cudaq::sample_result counts = ctx.result;
+  cudaq::sample_result counts = ctx.result_old;
   counts.dump();
   int counter = 0;
   for (auto &[bits, count] : counts) {
@@ -512,7 +512,7 @@ CUDAQ_TEST(NVQIRTester, checkQubitAllocationFromRetrievedStateSimple) {
     __quantum__rt__qubit_release_array(qubits);
   });
 
-  cudaq::sample_result counts = sampleCtx.result;
+  cudaq::sample_result counts = sampleCtx.result_old;
   counts.dump();
   int counter = 0;
   for (auto &[bits, count] : counts) {
@@ -574,7 +574,7 @@ CUDAQ_TEST(NVQIRTester, checkQubitAllocationFromRetrievedStateExpand) {
     __quantum__rt__qubit_release_array(someQubits);
   });
 
-  cudaq::sample_result counts = sampleCtx.result;
+  cudaq::sample_result counts = sampleCtx.result_old;
   counts.dump();
   int counter = 0;
   // We should have a bigger GHZ state: |0000> + |1111>
@@ -673,7 +673,7 @@ CUDAQ_TEST(NVQIRTester, checkKrausApply) {
     __quantum__rt__qubit_release_array(qubits);
   });
 
-  cudaq::sample_result counts = ctx.result;
+  cudaq::sample_result counts = ctx.result_old;
   counts.dump();
   __quantum__rt__finalize();
 }
@@ -702,7 +702,7 @@ CUDAQ_TEST(NVQIRTester, checkKrausApplyGeneralUno) {
     __quantum__rt__qubit_release_array(qubits);
   });
 
-  cudaq::sample_result counts = ctx.result;
+  cudaq::sample_result counts = ctx.result_old;
   counts.dump();
   __quantum__rt__finalize();
 }
@@ -730,7 +730,7 @@ CUDAQ_TEST(NVQIRTester, checkKrausApplyGeneralDue) {
     __quantum__rt__qubit_release_array(qubits);
   });
 
-  cudaq::sample_result counts = ctx.result;
+  cudaq::sample_result counts = ctx.result_old;
   counts.dump();
   __quantum__rt__finalize();
 }
@@ -762,7 +762,7 @@ CUDAQ_TEST(NVQIRTester, checkKrausApplyGeneralTre) {
     __quantum__rt__qubit_release_array(qubits);
   });
 
-  cudaq::sample_result counts = ctx.result;
+  cudaq::sample_result counts = ctx.result_old;
   counts.dump();
   __quantum__rt__finalize();
 }

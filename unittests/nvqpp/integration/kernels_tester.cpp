@@ -336,10 +336,10 @@ CUDAQ_TEST(KernelsTester, msmTester_mz_only) {
   platform.with_execution_context(ctx_msm, multi_round_ghz{}, num_qubits,
                                   num_rounds);
 
-  // The MSM is now stored in ctx_msm.result. More precisely, the unfiltered
+  // The MSM is now stored in ctx_msm.result_old. More precisely, the unfiltered
   // MSM is stored there, but some post-processing may be required to
   // eliminate duplicate columns.
-  auto msm_as_strings = ctx_msm.result.sequential_data();
+  auto msm_as_strings = ctx_msm.result_old.sequential_data();
   printf("Columns of MSM:\n");
   for (int col = 0; auto x : msm_as_strings) {
     // For this multi_round_ghz, we expect a 15x15 identity matrix.
@@ -397,10 +397,10 @@ CUDAQ_TEST(KernelsTester, msmTester_mz_and_depol1_corr) {
   platform.with_execution_context(ctx_msm, multi_round_ghz{}, num_qubits,
                                   num_rounds, noise_bf_prob);
 
-  // The MSM is now stored in ctx_msm.result. More precisely, the unfiltered
+  // The MSM is now stored in ctx_msm.result_old. More precisely, the unfiltered
   // MSM is stored there, but some post-processing may be required to
   // eliminate duplicate columns.
-  auto msm_as_strings = ctx_msm.result.sequential_data();
+  auto msm_as_strings = ctx_msm.result_old.sequential_data();
   auto msm_transpose = transpose_msm(msm_as_strings);
 
   const std::vector<std::string> expected = {
@@ -496,7 +496,7 @@ get_msm_test(double noise_probability) {
   ctx_msm.msm_dimensions = ctx_msm_size.msm_dimensions;
   platform.with_execution_context(ctx_msm, simple_test{}, noise_probability);
 
-  return {transpose_msm(ctx_msm.result.sequential_data()),
+  return {transpose_msm(ctx_msm.result_old.sequential_data()),
           ctx_msm.msm_probabilities.value(), ctx_msm.msm_prob_err_id.value()};
 }
 
@@ -621,7 +621,7 @@ CUDAQ_TEST(KernelsTester, msmTester_two_qubit_depol_broadcast) {
   ctx_msm.msm_dimensions = ctx_msm_size.msm_dimensions;
   platform.with_execution_context(ctx_msm, cx_kernel{});
 
-  auto msm_transpose = transpose_msm(ctx_msm.result.sequential_data());
+  auto msm_transpose = transpose_msm(ctx_msm.result_old.sequential_data());
 
   // Mechanisms {X,Y,Z} on q0 then {X,Y,Z} on q1; only X and Y flip the
   // Z-basis measurement. Row 0 is q0, row 1 is q1.
@@ -675,7 +675,7 @@ CUDAQ_TEST(KernelsTester, msmTester_two_qubit_bitflip_broadcast) {
   ctx_msm.msm_dimensions = ctx_msm_size.msm_dimensions;
   platform.with_execution_context(ctx_msm, cx_kernel{});
 
-  auto msm_transpose = transpose_msm(ctx_msm.result.sequential_data());
+  auto msm_transpose = transpose_msm(ctx_msm.result_old.sequential_data());
 
   // Two mechanisms: X on q0 (flips row 0) and X on q1 (flips row 1).
   const std::vector<std::string> expected = {"1.", ".1"};

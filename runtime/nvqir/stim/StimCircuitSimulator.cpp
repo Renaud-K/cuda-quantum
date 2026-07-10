@@ -207,7 +207,7 @@ protected:
     }
     ExecutionResult result(counts);
     result.sequentialData = std::move(sequentialData);
-    getExecutionContext()->result = result;
+    getExecutionContext()->result_old = result;
   }
 
   /// @brief Populate the m2 fields in @p ctx from `recordedCircuit`.

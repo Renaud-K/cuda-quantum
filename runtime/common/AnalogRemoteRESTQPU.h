@@ -61,7 +61,7 @@ public:
         return {};
       }
       // Otherwise make this synchronous
-      executionContext->result = future.get();
+      executionContext->result_old = future.get();
     }
     return {};
   }

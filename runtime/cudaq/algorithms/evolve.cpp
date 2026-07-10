@@ -89,7 +89,7 @@ evolve_result evolveSingle(const cudaq::rydberg_hamiltonian &hamiltonian,
         (void *)(const_cast<char *>(programString.c_str())),
         programString.size(), 0);
   });
-  auto sampleResults = ctx.result;
+  auto sampleResults = ctx.result_old;
 
   return evolve_result(sampleResults);
 }

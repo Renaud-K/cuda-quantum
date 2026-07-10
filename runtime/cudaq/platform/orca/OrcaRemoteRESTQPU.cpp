@@ -95,7 +95,7 @@ cudaq::OrcaRemoteRESTQPU::launchKernelCommon(const std::string &kernelName,
   }
 
   // Otherwise make this synchronous
-  ctx->result = future.get();
+  ctx->result_old = future.get();
 
   // TODO: support dynamic result types.
   return {};

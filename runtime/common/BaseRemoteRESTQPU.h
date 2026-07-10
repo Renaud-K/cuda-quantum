@@ -397,7 +397,8 @@ public:
     }
 
     // Otherwise make this synchronous
-    executionContext->result = future.get();
+    future.get();
+    return;
   }
 
   async_sample_result
