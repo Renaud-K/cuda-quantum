@@ -18,13 +18,28 @@ endif()
 
 add_custom_target(nvq++)
 add_dependencies(nvq++
-  cudaq-builder
-  nvqir-qpp
+  # Toolchain binaries invoked by the nvq++ driver script.
   cudaq-quake
   cudaq-opt
   cudaq-translate
   cudaq-target-conf
   fixup-linkage
+  # Runtime shared libraries that nvq++ always links into the final
+  # executable (see LINKLIBS/NVQIR_LIBS in nvq++.in). CMAKE_CXX_COMPILER=nvq++
+  # alone creates no build edge for these -l flags, so callers that depend on
+  # the nvq++ custom target (e.g. add_nvqpp_executable()) transitively get
+  # correct build ordering without repeating this list per target.
+  cudaq
+  cudaq-builder
+  cudaq-mlir-runtime
+  cudaq-operator
+  cudaq-logger
+  cudaq-common
+  cudaq-ensmallen
+  cudaq-nlopt
+  cudaq-platform-default
+  cudaq-em-default
+  nvqir
 )
 configure_file("nvq++.in"
                "${CUDAQ_BINARY_DIR}/bin/nvq++" 
