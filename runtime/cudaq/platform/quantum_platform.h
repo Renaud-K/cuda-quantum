@@ -9,6 +9,7 @@
 #pragma once
 
 #include "common/CodeGenConfig.h"
+#include "common/CompileTarget.h"
 #include "common/CompiledModule.h"
 #include "common/ExecutionContext.h"
 #include "common/KernelArgs.h"
@@ -18,8 +19,8 @@
 #include "common/SampleResult.h"
 #include "common/ThunkInterface.h"
 #include "nvqpp_interface.h"
-#include "cudaq/Target/CompileTarget.h"
-#include "cudaq/Target/RuntimeEndpoint.h"
+#include "cudaq/algorithms/dem/policy.h"
+#include "cudaq/platform/RuntimeEndpoint.h"
 #include "cudaq/platform/qpu.h"
 #include "cudaq/remote_capabilities.h"
 #include "cudaq/utils/cudaq_utils.h"
@@ -145,6 +146,13 @@ public:
 
   /// Set the runtime endpoint for the QPU with ID @p qpuId.
   void setRuntimeEndpoint(RuntimeEndpoint endpoint, std::size_t qpuId = 0);
+
+  /// Set the compile target for the platform.
+  ///
+  /// Takes precedence over the compile target the QPUs would provide. It is
+  /// dropped again whenever the platform's QPUs are replaced, i.e. on the next
+  /// target change.
+  void setCompileTarget(std::optional<CompileTarget> target);
   /// \endcond
 
   /// Return whether this platform is a simulator.
@@ -162,6 +170,9 @@ public:
 
   /// @brief Return true if QPU is locally emulating a remote QPU
   bool is_emulated(std::size_t qpu_id = 0) const;
+
+  /// @brief Return true if the QPU consumes JIT-compiled artifacts.
+  bool supports_jit(std::size_t qpu_id = 0) const;
 
   /// @brief Set the noise model for @p qpu_id on this platform.
   void set_noise(const noise_model *model, std::size_t qpu_id = 0);
@@ -218,28 +229,17 @@ public:
                       std::size_t qpu_id = 0);
 
   template <typename Policy>
-  [[nodiscard]] cudaq::CompileTarget getCompileTarget(const Policy &policy,
-                                                      std::size_t qpu_id = 0) {
-    validateQpuId(qpu_id, /*acceptRuntimeEndpoints=*/true);
-    if (compileTarget.has_value()) {
-      return compileTarget.value();
-    }
-    // Fallback to old behaviour: query the QPU for its compile target.
-    auto &qpu = platformQPUs[qpu_id];
-    return qpu->getCompileTarget(policy);
-  }
-
   [[nodiscard]] cudaq::CompileTarget
-  getCompileTarget(const cudaq::other_policies &policy,
-                   std::size_t qpu_id = 0) {
+  getCompileTarget(const Policy &policy, std::size_t qpu_id = 0,
+                   bool skipPipelineSubstitutions = false) const {
     validateQpuId(qpu_id, /*acceptRuntimeEndpoints=*/true);
     if (compileTarget.has_value()) {
       return compileTarget.value();
     }
     // Fallback to old behaviour: query the QPU for its compile target.
-    auto *ctx = getExecutionContext();
     auto &qpu = platformQPUs[qpu_id];
-    return qpu->getCompileTarget(policy, ctx);
+    skipPipelineSubstitutions |= std::is_same_v<Policy, cudaq::dem_policy>;
+    return qpu->getCompileTarget(skipPipelineSubstitutions);
   }
 
   /// List all available platforms
@@ -262,9 +262,6 @@ protected:
   /// override
   /// @param name
   virtual void setTargetBackend(const std::string &name) {}
-
-  /// Set the compile target for the platform.
-  void setCompileTarget(std::optional<CompileTarget> target);
 
   /// Append @p qpu to the platform's QPUs.
   QPU &addQPU(std::unique_ptr<QPU> qpu);

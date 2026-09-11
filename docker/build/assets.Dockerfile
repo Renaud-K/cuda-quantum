@@ -112,6 +112,7 @@ ADD "scripts/migrate_assets.sh" /cuda-quantum/scripts/migrate_assets.sh
 ADD "scripts/cudaq_set_env.sh" /cuda-quantum/scripts/cudaq_set_env.sh
 ADD "scripts/build_installer.sh" /cuda-quantum/scripts/build_installer.sh
 ADD "scripts/set_env_defaults.sh" /cuda-quantum/scripts/set_env_defaults.sh
+ADD "scripts/check_mlir_symbols.sh" /cuda-quantum/scripts/check_mlir_symbols.sh
 ADD "targettests" /cuda-quantum/targettests
 ADD "tpls/customizations" /cuda-quantum/tpls/customizations
 ADD "tpls/json" /cuda-quantum/tpls/json
@@ -233,6 +234,7 @@ ADD "runtime" /cuda-quantum/runtime
 ADD "tpls/customizations" /cuda-quantum/tpls/customizations
 ADD "tpls/json" /cuda-quantum/tpls/json
 ADD "utils" /cuda-quantum/utils
+ADD "scripts/check_mlir_symbols.sh" /cuda-quantum/scripts/check_mlir_symbols.sh
 ADD "CMakeLists.txt" /cuda-quantum/CMakeLists.txt
 ADD "LICENSE" /cuda-quantum/LICENSE
 ADD "LICENSES" /cuda-quantum/LICENSES
@@ -340,8 +342,9 @@ RUN gcc_packages=$(dnf list installed "gcc*" | sed '/Installed Packages/d' | cut
     dnf install -y --nobest --setopt=install_weak_deps=False glibc-devel
 
 ## [Python MLIR tests]
+# lit 23+ rejects the external shell our lit configs use. Pin to LLVM 22.x.
 RUN cd /cuda-quantum && source scripts/configure_build.sh && \
-    python3 -m pip install lit pytest scipy && \
+    python3 -m pip install 'lit<23' pytest scipy && \
     "${LLVM_INSTALL_PREFIX}/bin/llvm-lit" -v _skbuild/python/tests/mlir \
         --param cudaq_site_config=_skbuild/python/tests/mlir/lit.site.cfg.py
 # The other tests for the Python wheel are run post-installation.
@@ -361,7 +364,7 @@ RUN if [ ! -x "$(command -v nvidia-smi)" ] || [ -z "$(nvidia-smi | egrep -o "CUD
     # Exclude lit test suites from ctest. They are run individually above/below.
     # FIXME: Tensor unit tests for runtime errors throw a different exception.
     # Issue: https://github.com/NVIDIA/cuda-quantum/issues/2321
-    excludes+=" --exclude-regex ctest-cudaq|ctest-targettests|pycudaq-mlir|Tensor.*Error" && \
+    excludes+=" --exclude-regex ctest-cudaq|ctest-targettests|ctest-runtime|pycudaq-mlir|Tensor.*Error" && \
     ctest --output-on-failure --test-dir build $excludes
 
 ENV PATH="${PATH}:/usr/local/cuda/bin" 
@@ -373,14 +376,15 @@ RUN if [ -x "$(command -v nvidia-smi)" ] && [ -n "$(nvidia-smi | egrep -o "CUDA 
             cuda-cudart-devel-$(echo ${CUDA_VERSION} | tr . -); \
     fi
 
-RUN python3 -m ensurepip --upgrade && python3 -m pip install lit && \
+# lit 23+ rejects the external shell our lit configs use. Pin to LLVM 22.x.
+RUN python3 -m ensurepip --upgrade && python3 -m pip install 'lit<23' && \
     dnf install -y --nobest --setopt=install_weak_deps=False file which
 RUN cd /cuda-quantum && source scripts/configure_build.sh && \
     if [ ! -x "$(command -v nvcc)" ]; then \
         # The tests is marked correctly as requiring nvcc, but since nvcc
         # is available during the build we need to filter it manually.
         filtered=" --filter-out MixedLanguage/cuda-1"; \
-	filtered+="|AST-Quake/calling_convention|test_argument_conversion"; \
+	filtered+="|Frontend/calling_convention"; \
     fi && \
     "$LLVM_INSTALL_PREFIX/bin/llvm-lit" -v build/cudaq/test \
         --param cudaq_site_config=build/cudaq/test/lit.site.cfg.py ${filtered} && \
@@ -391,7 +395,15 @@ RUN cd /cuda-quantum && source scripts/configure_build.sh && \
         filtered+="|TargetConfig/check_compile"; \
     fi && \
     "$LLVM_INSTALL_PREFIX/bin/llvm-lit" -v build/targettests \
-        --param cudaq_site_config=build/targettests/lit.site.cfg.py ${filtered}
+        --param cudaq_site_config=build/targettests/lit.site.cfg.py ${filtered} && \
+    filtered="" && \
+    if [ ! -x "$(command -v nvcc)" ]; then \
+        # The test is marked correctly as requiring nvcc, but since nvcc
+        # is available during the build we need to filter it manually.
+        filtered=" --filter-out argument_conversion"; \
+    fi && \
+    "$LLVM_INSTALL_PREFIX/bin/llvm-lit" -v build/runtime/test \
+        --param cudaq_site_config=build/runtime/test/lit.site.cfg.py ${filtered}
 
 # Export ccache data so CI can extract it for persistence.
 # Tar inside the container to export a single file instead of thousands of

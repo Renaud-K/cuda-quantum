@@ -9,10 +9,13 @@
 
 #pragma once
 
+#include "common/AnalysisScope.h"
+#include "common/CompileOptions.h"
 #include "common/CompiledModule.h"
 #include "common/ExecutionContext.h"
 #include "common/KernelArgs.h"
 #include "cudaq/algorithms/msm/policy.h"
+#include "cudaq/algorithms/policy_cpos.h"
 #include "cudaq/platform.h"
 #include "cudaq/platform/qpu.h"
 #include "cudaq/qis/execution_manager.h"
@@ -25,6 +28,7 @@
 #ifndef CUDAQ_DISABLE_JIT_COMPILER
 namespace cudaq_internal::compiler {
 cudaq::CompiledModule compileModule(cudaq::CompileTarget target,
+                                    cudaq::CompileOptions options,
                                     const cudaq::SourceModule &src,
                                     cudaq::KernelArgs args, bool isEntryPoint);
 } // namespace cudaq_internal::compiler
@@ -61,8 +65,8 @@ auto launch(const Policy &policy, std::size_t qpu_id, ExecutionContext &ctx,
 
   typename Policy::result_type result;
   auto &qpu = platform.getRuntimeEndpoint(qpu_id);
-  ctx.executeKernelApi = [&qpu, &result, &policy](const AnyModule &module,
-                                                  const KernelArgs &args) {
+  ctx.executeKernelApi = [&qpu, &result, &policy, &platform, qpu_id](
+                             const AnyModule &module, const KernelArgs &args) {
     CompiledModule compiled;
     if (const auto *source = std::get_if<SourceModule>(&module)) {
 #ifdef CUDAQ_DISABLE_JIT_COMPILER
@@ -73,12 +77,22 @@ auto launch(const Policy &policy, std::size_t qpu_id, ExecutionContext &ctx,
 #else
       CUDAQ_INFO("No compiled module found. Compiling.");
       cudaq::CompileTarget target;
+      cudaq::CompileOptions options;
       if constexpr (requires { policy.inner; }) {
-        target = cudaq::get_compile_target(policy.inner);
+        options = cudaq::get_compile_options(policy.inner);
+        target = platform.getCompileTarget(policy.inner, qpu_id);
       } else {
-        target = cudaq::get_compile_target(policy);
+        options = cudaq::get_compile_options(policy);
+        target = platform.getCompileTarget(policy, qpu_id);
       }
-      compiled = cudaq_internal::compiler::compileModule(std::move(target),
+      const bool isEmulated = platform.is_emulated(qpu_id);
+      const bool isRemote = platform.is_remote(qpu_id);
+      options.emulate = isEmulated;
+      options.emitJit |= !isRemote;
+      if (!platform.supports_jit(qpu_id))
+        options.emitJit = false;
+      options.boolVecBitPacked = !isRemote && !isEmulated;
+      compiled = cudaq_internal::compiler::compileModule(target, options,
                                                          *source, args,
                                                          /*isEntryPoint=*/true);
 #endif
@@ -96,6 +110,12 @@ auto launch(const Policy &policy, std::size_t qpu_id, ExecutionContext &ctx,
   else
     CUDAQ_INFO("Launching kernel in sync mode with policy {}", policy.name);
 
+  if constexpr (!std::is_same_v<Policy, dem_policy>) {
+    if (cudaq::detail::AnalysisScope::is_active()) {
+      throw std::runtime_error(
+          "Invalid kernel launch within an active AnalysisScope");
+    }
+  }
   detail::try_finally(
       [&] {
         detail::with_policy_and_ctx(policy, ctx, std::forward<Callable>(f),
@@ -132,7 +152,6 @@ msm_result launch(msm_policy policy, Callable &&f, Args &&...args) {
   ctx.kernelName = policy.kernelName;
   policy.noiseModel = platform.get_noise(qpu_id);
   ctx.noiseModel = policy.noiseModel;
-  ctx.msm_dimensions = policy.dimensions;
   return detail::launch(policy, qpu_id, ctx, platform,
                         std::forward<Callable>(f), std::forward<Args>(args)...);
 }

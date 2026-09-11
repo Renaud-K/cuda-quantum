@@ -29,12 +29,17 @@ namespace cudaq::opt {
 void addAggressiveInlining(mlir::OpPassManager &pm, bool fatalCheck = false);
 void registerAggressiveInliningPipeline();
 
-void registerPhaseFoldingPipeline();
 void registerUnrollingPipeline();
 void registerClassicalOptimizationPipeline();
 void registerMappingPipeline();
 void registerToCFGPipeline();
 void registerFaultTolerantTargetPipeline();
+
+/// Convert supported Quake IR to explicit linear values. This splits
+/// fixed-size allocations, expands vector controls, and threads reusable
+/// controls through their uses.
+void addConvertToLinearValues(mlir::OpPassManager &pm);
+void registerConvertToLinearValuesPipeline();
 
 /// This pipeline is run on every kernel decorator immediately after its
 /// definition has been processed by the Python bridge. It converts the
@@ -59,6 +64,11 @@ void addDecomposition(mlir::OpPassManager &pm,
 /// UnitarySynthesis
 /// ApplyOpSpecialization
 /// constant propagation
+/// `exp-pauli` and U3 decomposition
+/// quantum deallocation insertion and linear-value conversion
+/// `thresholded` exact-angle simplification
+/// register-to-memory conversion
+/// rotation-to-`Rz` decomposition
 /// CliffordTSynthesis
 /// Decomposition to the {H, S, T, X, Z, CNOT} basis
 ///
@@ -73,7 +83,11 @@ void addDecomposition(mlir::OpPassManager &pm,
 /// idempotent on already-lowered IR, so the duplication is safe.
 ///
 /// Opt-in only. This helper is not added to default target pipelines.
-void addCliffordTSynthesis(mlir::OpPassManager &pm, double epsilon = 1e-10);
+void addCliffordTSynthesis(mlir::OpPassManager &pm, double epsilon = 1e-10,
+                           bool failOnControlledRotation = false);
+/// Append the common pipeline that expands, normalizes, and lowers
+/// `quake.phase` operations before final code generation.
+void addPhaseLifecycle(mlir::OpPassManager &pm);
 
 void registerAOTPipelines();
 void registerJITPipelines();
@@ -83,12 +97,15 @@ void registerJITPipelines();
 /// fully expanded to eliminate control flow.
 /// Default values are threshold = 1024, allow break = true, and allow closed
 /// interval = true. If loop unrolling is disabled (`disableLoopUnrolling` =
-/// true), the pipeline keeps cc.loop operations.
+/// true), the pipeline keeps cc.loop operations. The two selective unrolling
+/// options mirror the cc-loop-unroll options of the same name.
 void createClassicalOptimizationPipeline(
     mlir::OpPassManager &pm, std::optional<unsigned> threshold = std::nullopt,
     std::optional<bool> allowBreak = std::nullopt,
     std::optional<bool> allowClosedInterval = std::nullopt,
-    std::optional<bool> disableLoopUnrolling = std::nullopt);
+    std::optional<bool> disableLoopUnrolling = std::nullopt,
+    std::optional<bool> unrollOnlyAliasingQuantumAccessLoops = std::nullopt,
+    std::optional<bool> unrollOnlyIndexUseLoops = std::nullopt);
 
 std::unique_ptr<mlir::Pass> createExpandMeasurementsPass();
 void addLowerToCFG(mlir::OpPassManager &pm);

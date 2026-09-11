@@ -1199,7 +1199,7 @@ def test_call_kernel_expressions():
     counts = cudaq.sample(kernel)
     counts.dump()
     assert len(counts) == 1
-    assert '1' in counts
+    assert '00100' in counts
 
     @cudaq.kernel(defer_compilation=False)
     def kernelThatTakesIntAndFloat(qubits: cudaq.qview, qbit: int, val: float):
@@ -1555,7 +1555,7 @@ def test_repeated_builder_launch_no_segfault():
 
     The crash only surfaces when the bit-packed ``std::vector<bool>`` padding is
     nonzero, so run under ``MALLOC_PERTURB_`` (set before the process starts) in
-    a subprocess. See ``runtime/test/test_argument_conversion.cpp`` for the
+    a subprocess. See ``runtime/test/Regress/argument_conversion.cpp`` for the
     unit-level regression.
     """
     script = (

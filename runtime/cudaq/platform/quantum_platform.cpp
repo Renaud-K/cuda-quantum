@@ -113,8 +113,8 @@ void quantum_platform::reset_noise(std::size_t qpu_id) {
   set_noise(nullptr, qpu_id);
 }
 
-static cudaq::CompileTarget
-getDefaultPythonCompileTargetImpl(quantum_platform *platform = nullptr) {
+cudaq::CompileTarget
+createDefaultCompileTarget(quantum_platform *platform = nullptr) {
   if (!platform)
     platform = getQuantumPlatformInternal();
 
@@ -124,54 +124,22 @@ getDefaultPythonCompileTargetImpl(quantum_platform *platform = nullptr) {
     CUDAQ_WARN("CUDAQ_PYTHON_CODEGEN_DUMP is no longer supported. Use "
                "CUDAQ_MLIR_PRINT_EACH_PASS=argsynth instead.");
   }
-  cudaq::CompileTarget ct;
   auto *rt = platform->get_runtime_target();
-  if (!rt) {
-    ct.pipelineConfig.skipTargetLoweringPipeline = true;
-  } else {
-    ct = cudaq::CompileTarget(rt->config, rt->runtimeConfig,
-                              platform->is_emulated());
+  cudaq::config::TargetConfig targetConfig;
+  std::map<std::string, std::string> runtimeConfig;
+  if (rt) {
+    targetConfig = rt->config;
+    runtimeConfig = rt->runtimeConfig;
   }
+  auto ct = cudaq::CompileTarget::createFromConfig(targetConfig, runtimeConfig);
 
   bool isLocalSimulator = !(platform->is_remote() || platform->is_emulated());
 
   ct.fullySpecialize = !isLocalSimulator;
-  ct.isLocalSimulator = isLocalSimulator;
   ct.supportDeviceCalls = true;
   ct.argumentSynthChangeSemantics = false;
   ct.pipelineConfig.codegenTranslation = "qir:";
-  ct.emitJit = true;
-  return ct;
-}
-
-cudaq::CompileTarget getDefaultCompileTarget(const sample_policy &) {
-  auto ct = getDefaultPythonCompileTargetImpl();
   ct.overrideAOTCompilation = false;
-  return ct;
-}
-cudaq::CompileTarget getDefaultCompileTarget(const observe_policy &) {
-  auto ct = getDefaultPythonCompileTargetImpl();
-  ct.overrideAOTCompilation = false;
-  return ct;
-}
-cudaq::CompileTarget getDefaultCompileTarget(const run_policy &) {
-  auto ct = getDefaultPythonCompileTargetImpl();
-  ct.overrideAOTCompilation = false;
-  return ct;
-}
-cudaq::CompileTarget getDefaultCompileTarget(const dem_policy &) {
-  auto ct = getDefaultPythonCompileTargetImpl();
-  ct.overrideAOTCompilation = false;
-  ct.emitJit = true;
-  ct.emitTargetCode = false;
-  ct.pipelineConfig.skipTargetLoweringPipeline = true;
-  return ct;
-}
-cudaq::CompileTarget getDefaultCompileTarget(const other_policies &,
-                                             ExecutionContext *context) {
-  auto ct = getDefaultPythonCompileTargetImpl();
-  ct.overrideAOTCompilation = false;
-  ct.emitResourceCounts = context && context->name == "resource-count";
   return ct;
 }
 
@@ -273,30 +241,38 @@ std::optional<QubitConnectivity> quantum_platform::connectivity() {
 }
 
 bool quantum_platform::is_simulator(std::size_t qpu_id) const {
-  validateQpuId(qpu_id);
-  disableRuntimeEndpointOverride(qpu_id, "is_simulator");
+  validateQpuId(qpu_id, /*acceptRuntimeEndpoints=*/true);
+  if (hasRuntimeEndpointOverride(qpu_id)) {
+    return runtimeEndpoints[qpu_id]->isSimulator;
+  }
+  // Fallback to QPU
   return platformQPUs[qpu_id]->isSimulator();
 }
 
 bool quantum_platform::is_remote(std::size_t qpu_id) const {
+  validateQpuId(qpu_id, /*acceptRuntimeEndpoints=*/true);
   if (hasRuntimeEndpointOverride(qpu_id)) {
-    CUDAQ_WARN(
-        "quantum_platform::is_remote is currently not supported for custom "
-        "runtime endpoints");
-    return false;
+    return runtimeEndpoints[qpu_id]->isRemote;
   }
-  validateQpuId(qpu_id);
+  // Fallback to QPU
   return platformQPUs[qpu_id]->isRemote();
 }
 
 bool quantum_platform::is_emulated(std::size_t qpu_id) const {
+  validateQpuId(qpu_id, /*acceptRuntimeEndpoints=*/true);
   if (hasRuntimeEndpointOverride(qpu_id)) {
-    CUDAQ_WARN("quantum_platform::is_emulated is currently not supported for "
-               "custom runtime endpoints");
-    return false;
+    return runtimeEndpoints[qpu_id]->isEmulated;
   }
-  validateQpuId(qpu_id);
+  // Fallback to QPU
   return platformQPUs[qpu_id]->isEmulated();
+}
+
+bool quantum_platform::supports_jit(std::size_t qpu_id) const {
+  validateQpuId(qpu_id, /*acceptRuntimeEndpoints=*/true);
+  if (hasRuntimeEndpointOverride(qpu_id))
+    return runtimeEndpoints[qpu_id]->supportsJit;
+  // A QPU always consumes the JIT artifact.
+  return true;
 }
 
 std::size_t quantum_platform::get_num_qubits(std::size_t qpu_id) const {
@@ -307,13 +283,9 @@ std::size_t quantum_platform::get_num_qubits(std::size_t qpu_id) const {
 
 bool quantum_platform::supports_explicit_measurements(
     std::size_t qpu_id) const {
-  if (hasRuntimeEndpointOverride(qpu_id)) {
-    CUDAQ_WARN("quantum_platform::supports_explicit_measurements is currently "
-               "not supported for custom runtime endpoints");
-    return false;
-  }
-  validateQpuId(qpu_id);
-  return platformQPUs[qpu_id]->supportsExplicitMeasurements();
+  auto ct = getCompileTarget(other_policies{}, qpu_id,
+                             /*skipPipelineSubstitutions=*/true);
+  return ct.supportExplicitMeasurements;
 }
 
 void quantum_platform::launchVQE(const std::string kernelName,
@@ -358,6 +330,7 @@ void quantum_platform::ensureRuntimeEndpointExists(std::size_t qpuId,
 void quantum_platform::resetRuntimeEndpoints() {
   std::scoped_lock lock(runtimeEndpointsMutex);
   runtimeEndpoints.clear();
+  compileTarget.reset();
 }
 
 QPU &quantum_platform::addQPU(std::unique_ptr<QPU> qpu) {
@@ -394,7 +367,7 @@ void quantum_platform::setRuntimeEndpoint(RuntimeEndpoint endpoint,
 
   if (!compileTarget.has_value()) {
     CUDAQ_WARN("Overriding compile target with default (local simulator)");
-    compileTarget = getDefaultPythonCompileTargetImpl(this);
+    compileTarget = createDefaultCompileTarget(this);
   }
 
   std::scoped_lock lock(runtimeEndpointsMutex);

@@ -160,6 +160,7 @@ struct ExpandControlNegationsPass
                 ReplaceNegativeControl<cudaq::quake::U3Op>,
                 ReplaceNegativeControl<cudaq::quake::SwapOp>,
                 ReplaceNegativeControl<cudaq::quake::ExpPauliOp>,
+                ReplaceNegativeControl<cudaq::quake::PhaseOp>,
                 ReplaceNegativeControl<cudaq::quake::CustomUnitaryCallOp>,
                 ReplaceNegativeControl<cudaq::quake::CustomUnitaryConstantOp>>(
             ctx);
