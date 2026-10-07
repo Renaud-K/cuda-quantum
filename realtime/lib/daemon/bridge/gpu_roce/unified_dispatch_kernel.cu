@@ -84,14 +84,18 @@ unified_lookup_entry(std::uint32_t function_id,
 //   use_bf=false (iGPU): prepare_receive_send + send    (NIC_HANDLER_AUTO)
 //
 // Receive WQEs are pre-posted by the host before this kernel launches.
+//
+// Requests land in RX slot N and the response to each goes out of TX slot N,
+// so the request stays intact while the handler writes its result.
 //==============================================================================
 
 __global__ void gpu_roce_unified_dispatch_kernel(
     struct doca_gpu_dev_verbs_qp *qp, volatile int *shutdown_flag,
-    std::uint8_t *ring_buf, std::size_t ring_buf_stride_sz,
-    std::uint32_t ring_buf_mkey, std::uint32_t ring_buf_stride_num,
-    std::size_t frame_size, cudaq_function_entry_t *function_table,
-    std::size_t func_count, std::uint64_t *stats, int use_bf) {
+    std::uint8_t *rx_buf, std::size_t rx_stride_sz,
+    std::uint32_t rx_stride_num, std::uint8_t *tx_buf,
+    std::size_t tx_stride_sz, std::uint32_t tx_mkey, std::size_t frame_size,
+    cudaq_function_entry_t *function_table, std::size_t func_count,
+    std::uint64_t *stats, int use_bf) {
   if (qp == nullptr)
     return;
 
@@ -103,13 +107,14 @@ __global__ void gpu_roce_unified_dispatch_kernel(
   const bool use_inline = (frame_size <= MAX_SEND_INLINE_WQE);
 
   // Receive WQEs are pre-posted by the host (GpuRoceTransceiverPrepareKernel
-  // in start() on dGPU, or gpu_roce_prepare_receive_send() on iGPU).
+  // in start() on dGPU, or gpu_roce_prepare_receive_send() on iGPU).  Sends
+  // read from the TX ring, so its key is the one the WQE needs.
   __shared__ struct doca_gpu_dev_verbs_wqe wqe_sh;
 
   if (use_bf) {
-    prepare_send_shared(qp, &wqe_sh, frame_size, ring_buf_mkey);
+    prepare_send_shared(qp, &wqe_sh, frame_size, tx_mkey);
   } else {
-    prepare_receive_send(qp, frame_size, ring_buf_mkey);
+    prepare_receive_send(qp, frame_size, tx_mkey);
   }
 
   doca_gpu_dev_verbs_ticket_t cq_ticket = 0;
@@ -121,53 +126,50 @@ __global__ void gpu_roce_unified_dispatch_kernel(
         unified_poll_receive(cq_rq, cqe, cqe_mask, cq_ticket, shutdown_flag);
     if (stride == UINT32_MAX)
       break;
-    if (stride >= ring_buf_stride_num) {
+    if (stride >= rx_stride_num) {
       sq_wqe_idx++;
       repost_receive(qp, sq_wqe_idx);
       cq_ticket = sq_wqe_idx;
       continue;
     }
 
-    auto *slot =
-        ring_buf + static_cast<std::uint64_t>(stride) * ring_buf_stride_sz;
-    auto *header = reinterpret_cast<RPCHeader *>(slot);
+    auto *header = reinterpret_cast<RPCHeader *>(
+        rx_buf + static_cast<std::uint64_t>(stride) * rx_stride_sz);
+    auto *tx_slot = tx_buf + static_cast<std::uint64_t>(stride) * tx_stride_sz;
+    auto *response = reinterpret_cast<RPCResponse *>(tx_slot);
+
+    int status = -1;
+    std::uint32_t result_len = 0;
 
     if (header->magic == RPC_MAGIC_REQUEST) {
-      std::uint32_t function_id = header->function_id;
-      std::uint32_t arg_len = header->arg_len;
-      std::uint32_t request_id = header->request_id;
-      std::uint64_t ptp_timestamp = header->ptp_timestamp;
-
       const cudaq_function_entry_t *entry =
-          unified_lookup_entry(function_id, function_table, func_count);
-
-      int status = -1;
-      std::uint32_t result_len = 0;
+          unified_lookup_entry(header->function_id, function_table, func_count);
 
       if (entry != nullptr &&
           entry->dispatch_mode == CUDAQ_DISPATCH_DEVICE_CALL) {
         auto func = reinterpret_cast<DeviceRPCFunction>(
             entry->handler.device_fn_ptr);
-        void *arg_buffer = static_cast<void *>(header + 1);
-        auto *output_buffer = slot + sizeof(RPCResponse);
+        void *arg_buffer = header + 1;
+        void *output_buffer = response + 1;
         auto max_result_len = static_cast<std::uint32_t>(
             frame_size - sizeof(RPCResponse));
 
-        status =
-            func(arg_buffer, output_buffer, arg_len, max_result_len,
-                 &result_len);
+        status = func(arg_buffer, output_buffer, header->arg_len,
+                      max_result_len, &result_len);
       }
-
-      auto *response = reinterpret_cast<RPCResponse *>(slot);
-      response->magic = RPC_MAGIC_RESPONSE;
-      response->status = status;
-      response->result_len = result_len;
-      response->request_id = request_id;
-      response->ptp_timestamp = ptp_timestamp;
     }
 
-    auto buffer_addr =
-        static_cast<std::uint64_t>(ring_buf_stride_sz) * stride;
+    // Written for every frame, bad magic included: the send below is
+    // mandatory, and an unwritten TX slot would put whatever it last held on
+    // the wire.
+    response->magic = RPC_MAGIC_RESPONSE;
+    response->status = status;
+    response->result_len = result_len;
+    response->request_id = header->request_id;
+    response->ptp_timestamp = header->ptp_timestamp;
+
+    // Offset into the TX ring's registered region (registered at IOVA 0).
+    auto buffer_addr = static_cast<std::uint64_t>(tx_stride_sz) * stride;
     if (use_bf) {
       // dGPU: send first, then repost (original order).  Reposting before
       // send adds ~400ns by serializing a PCIe write ahead of BlueFlame.
@@ -177,7 +179,7 @@ __global__ void gpu_roce_unified_dispatch_kernel(
       } else {
         send_bf<GPU_ROCE_MAX_FRAME_SIZE_44B>(
             qp, &wqe_sh, sq_wqe_idx,
-            reinterpret_cast<std::uint64_t>(slot));
+            reinterpret_cast<std::uint64_t>(tx_slot));
       }
       sq_wqe_idx++;
       repost_receive(qp, sq_wqe_idx);
@@ -192,7 +194,7 @@ __global__ void gpu_roce_unified_dispatch_kernel(
         send<GPU_ROCE_MAX_FRAME_SIZE_0B>(qp, sq_wqe_idx - 1, buffer_addr);
       } else {
         send<GPU_ROCE_MAX_FRAME_SIZE_44B>(
-            qp, sq_wqe_idx - 1, reinterpret_cast<std::uint64_t>(slot));
+            qp, sq_wqe_idx - 1, reinterpret_cast<std::uint64_t>(tx_slot));
       }
     }
 
@@ -215,6 +217,7 @@ extern "C" void gpu_roce_launch_unified_dispatch(
   gpu_roce_unified_dispatch_kernel<<<1, 1, 0, stream>>>(
       static_cast<struct doca_gpu_dev_verbs_qp *>(ctx->gpu_dev_qp),
       shutdown_flag, ctx->rx_ring_data, ctx->rx_ring_stride_sz,
-      ctx->rx_ring_mkey, ctx->rx_ring_stride_num, ctx->frame_size,
-      function_table, func_count, stats, ctx->use_bf);
+      ctx->rx_ring_stride_num, ctx->tx_ring_data, ctx->tx_ring_stride_sz,
+      ctx->tx_ring_mkey, ctx->frame_size, function_table, func_count, stats,
+      ctx->use_bf);
 }
