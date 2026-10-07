@@ -177,7 +177,7 @@ Specific aspects of the simulation can be configured by defining the following e
 * **`CUDAQ_MPS_MAX_BOND=X`**: The maximum number of singular values to keep (fixed extent truncation). Default: 64.
 * **`CUDAQ_MPS_ABS_CUTOFF=X`**: The cutoff for the largest singular value during truncation. Eigenvalues that are smaller will be trimmed out. Default: 1e-5.
 * **`CUDAQ_MPS_RELATIVE_CUTOFF=X`**: The cutoff for the maximal singular value relative to the largest eigenvalue. Eigenvalues that are smaller than this fraction of the largest singular value will be trimmed out. Default: 1e-5
-* **`CUDAQ_MPS_SVD_ALGO=X`**: The SVD algorithm to use. Valid values are: `GESVD` (QR algorithm), `GESVDJ` (Jacobi method), `GESVDP` (`polar decomposition <https://epubs.siam.org/doi/10.1137/090774999>`__), `GESVDR` (`randomized methods <https://epubs.siam.org/doi/10.1137/090771806>`__). Default: `GESVDJ`.
+* **`CUDAQ_MPS_SVD_ALGO=X`**: The SVD algorithm to use. Valid values are: `GESVD` (QR algorithm), `GESVDJ` (Jacobi method), `GESVDP` (`polar decomposition <https://epubs.siam.org/doi/10.1137/090774999>`__), `GESVDR` (`randomized methods <https://epubs.siam.org/doi/10.1137/090771806>`__). Default: `GESVD`, matching the `cuTensorNet default <https://docs.nvidia.com/cuda/cuquantum/latest/cutensornet/overview.html#svd-options>`__.
 * **`CUDAQ_MPS_GAUGE=X`**: The optional gauge option to improve accuracy of the MPS simulation. Valid values are: `FREE` (gauge is disabled) or `SIMPLE` (simple update algorithm). By default, no gauge configuration is set, thus the default `cuquantum` MPS setting will be used (see `cuquantum` `doc <https://docs.nvidia.com/cuda/cuquantum/latest/cutensornet/api/types.html#cutensornetstatempsgaugeoption-t>`__).  
 
 .. note:: 
@@ -185,11 +185,6 @@ Specific aspects of the simulation can be configured by defining the following e
   This backend requires an NVIDIA GPU and CUDA runtime libraries. 
   If you do not have these dependencies installed, you may encounter an error stating `Invalid simulator requested`. 
   See the section :ref:`dependencies-and-compatibility` for more information about how to install dependencies.
-
-.. note::
-    The parallelism of Jacobi method (the default `CUDAQ_MPS_SVD_ALGO` setting) gives GPU better performance on small and medium size matrices.
-    If you expect a large number of singular values (e.g., increasing the `CUDAQ_MPS_MAX_BOND` setting), please adjust the `CUDAQ_MPS_SVD_ALGO` setting accordingly.  
-
 
 .. note::
 
@@ -215,13 +210,13 @@ Fermioniq
 
 .. _fermioniq-backend:
 
-`Fermioniq <https://fermioniq.com/>`__ offers a cloud-based tensor-network emulation platform, `Ava <https://www.fermioniq.com/ava/>`__, 
+`Fermioniq <https://fermioniq.com/>`__ offers a cloud-based tensor-network emulation platform, `Ava <https://docs.fermioniq.com/>`__,
 for the approximate simulation of large-scale quantum circuits beyond the memory limit of state vector and exact tensor network based methods. 
 
 The level of approximation can be controlled by setting the bond dimension: larger values yield more accurate simulations at the expense 
 of slower computation time. For a detailed description of Ava users are referred to the `online documentation <https://docs.fermioniq.com/>`__.
 
-Users of CUDA-Q can access a simplified version of the full Fermioniq emulator (`Ava <https://www.fermioniq.com/ava/>`__) from either
+Users of CUDA-Q can access a simplified version of the full Fermioniq emulator (`Ava <https://docs.fermioniq.com/>`__) from either
 C++ or Python. This version currently supports emulation of quantum circuits without noise, and can return measurement samples and/or 
 compute expectation values of observables.
 

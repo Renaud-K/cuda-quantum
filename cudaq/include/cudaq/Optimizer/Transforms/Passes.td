@@ -50,16 +50,6 @@ def AddWireset : Pass<"add-wireset", "mlir::ModuleOp"> {
   }];
 }
 
-def AssignWireIndices : Pass<"assign-wire-indices", "mlir::func::FuncOp"> {
-  let summary = "Replaces `null_wire` with `borrow_wire` from a `wire_set`.";
-  let description = [{
-    Replaces all instances of `quake.null_wire` with `quake.borrow_wire` from a
-    common `quake.wire_set` without any topological information.  Each wire is
-    assigned a unique identifier (the index into the `quake.wire_set`) through
-    this process.
-  }];
-}
-
 // ApplyOpSpecialization is a module pass because it may modify the ModuleOp
 // and add new FuncOps.
 def ApplySpecialization : Pass<"apply-op-specialization", "mlir::ModuleOp"> {
@@ -128,6 +118,16 @@ def ArgumentSynthesis : Pass<"argument-synthesis", "mlir::ModuleOp"> {
     "mlir::cf::ControlFlowDialect"];
 }
 
+def AssignWireIndices : Pass<"assign-wire-indices", "mlir::func::FuncOp"> {
+  let summary = "Replaces `null_wire` with `borrow_wire` from a `wire_set`.";
+  let description = [{
+    Replaces all instances of `quake.null_wire` with `quake.borrow_wire` from a
+    common `quake.wire_set` without any topological information.  Each wire is
+    assigned a unique identifier (the index into the `quake.wire_set`) through
+    this process.
+  }];
+}
+
 def BasisConversion : Pass<"basis-conversion", "mlir::ModuleOp"> {
   let summary = "Converts kernels to a set of basis operations.";
   let description = [{
@@ -169,169 +169,58 @@ def BasisConversion : Pass<"basis-conversion", "mlir::ModuleOp"> {
   ];
 }
 
-def CliffordTSynthesis : Pass<"clifford-t-synthesis", "mlir::ModuleOp"> {
-  let summary =
-    "Approximate constant-angle Rz rotations as Clifford+T sequences.";
+def BorrowChecking : Pass<"borrow-checking"> {
+  let summary = "Checking borrowing constraints.";
   let description = [{
-    Rewrites `quake.rz` operations with constant angles into sequences of
-    `quake.h`, `quake.s`, `quake.t`, and `quake.x` (Clifford+T) gates. The
-    synthesis algorithm is gridsynth (Ross & Selinger, arXiv:1403.2975)
-    provided by the embedded `cudaq::synth` library.
+    In the "physical qubit" form of quake, we have a constant number of qubits
+    at our disposal. These are modeled as hardware resources in our model. (This
+    differs from higher-level representations which have an "infinite" supply
+    of qubits.)
 
-    Only `quake.rz` is handled. `quake.rx`, `quake.ry`, and `quake.r1` must be
-    reduced to Rz first via the `RxToRz`, `RyToRz`, and `R1ToRz` decomposition
-    patterns; the `cudaq-fault-tolerant-target` pipeline runs that reduction
-    ahead of this pass. Any other rotation left in the IR is passed through
-    untouched.
+    In this physical qubit form, a program may borrow and return qubits from a
+    reified `quake.wire_set`. Any particular qubit can be borrowed exactly once
+    until it is returned.
 
-    Both memory semantics (`!quake.ref` targets, in-place) and value
-    semantics (`!quake.wire` targets, threaded) are handled. The synthesized
-    per-angle helper mirrors the form of the rotation it replaces.
+    This pass performs a static analysis to verify these constraints. It
+    reports wires that are borrowed while already borrowed, and wires that are
+    borrowed but neither returned nor passed out of the function. The analysis
+    works on structured control flow (`cc.if`, `cc.scope`, `cc.loop` with
+    `cc.break` and `cc.continue`), on CFG form, and on a mix of the two, so this
+    pass has no requirements on where it is placed in a pipeline. (The
+    `cc.unwind_*` operations are not modeled. They are source-level operations,
+    and lowering to wire form necessarily eliminates them.)
 
-    Preconditions (must be enforced by upstream passes):
-    - Rx/Ry/R1 rotations are reduced to Rz - run the `decomposition` pass with
-      the `RxToRz`, `RyToRz`, `R1ToRz` patterns enabled first.
-    - Rotation angles are folded to constants - run `ArgumentSynthesis` and
-      constant-propagation passes first.
-    - Controls and adjoints are materialized - run `ApplyOpSpecialization`
-      first.
+    A violation is *definite* when it occurs on every path reaching the
+    operation. A violation is *possible* when it occurs on only some paths
+    (such as a borrow in a loop body that is not returned before the next
+    iteration) or when the analysis cannot tell which wire a `return_wire`
+    returns.
 
-    The omega global phase of each synthesized word is emitted as an
-    uncontrolled `quake.phase` in the helper body, so the helper is exactly
-    equal to the rotation it replaces. Run `lower-phase` afterwards to
-    complete the phase lifecycle; the `cudaq-fault-tolerant-target` pipeline
-    does.
+    A call is not a place where a wire can come from or go to. A borrowed wire
+    that is passed to a call that produces no wire vanishes into it, and a call
+    that produces a wire without being passed one produces it out of nowhere.
+    Either is always an error, whatever the options. Since the IR is broken, the
+    analysis stops without reporting anything else about the function.
 
-    Gridsynth is probabilistic, and its cost grows sharply as `epsilon`
-    tightens: roughly 2 ms per distinct rotation at the default 1e-10, but
-    orders of magnitude more below 1e-30. Repeated angles are cached, so the
-    cost is per distinct angle rather than per operation. This pass is opt-in
-    via the `cudaq-fault-tolerant-target` pipeline only. It is not added to
-    the default target-prep pipeline.
+    NB: Call sites present a horizon obstacle in that the body of the called
+    kernel may be entirely unknown. It is therefore impossible to check if that
+    unknowable code has borrow violations or not. It is possible there are
+    borrow violations, but that are not statically known.
 
-    The work-budget options below cap the search work gridsynth may spend on
-    each rotation. They trade compile time against T-count: raise
-    `max-factoring-iterations` for shorter circuits, and the rest to widen the
-    worst case a single angle is allowed to reach. See `GridsynthOptions.h`
-    for what each one bounds in the algorithm and for the measurements behind
-    the defaults.
+    This pass is not composable. (Think of it as an extension of the IR
+    verifier.) It never modifies the IR.
   }];
+  let dependentDialects = ["cudaq::quake::QuakeDialect"];
   let options = [
-    Option<"epsilon", "epsilon", "double", /*default=*/"1e-10",
-      "Approximation tolerance epsilon for Clifford+T synthesis.">,
-    Option<"maxFactoringIterations", "max-factoring-iterations", "int64_t",
-      /*default=*/"500000",
-      "Gridsynth tests a candidate circuit by factoring an integer derived "
-      "from it (Algorithm 7.6, step 2b). This implementation factors with "
-      "Pollard-Brent rho, a randomized method that either finds a factor or "
-      "gives up, and this option caps the iterations one attempt may spend "
-      "on its composite. Factoring is where nearly all synthesis time goes, "
-      "so a lower cap is faster on every call; the cost is that abandoning a "
-      "candidate pushes the answer onto a later one, whose denominator "
-      "exponent -- and so T-count -- is at least as large. Raise this one to "
-      "trade compile time for shorter circuits.">,
-    Option<"maxCandidateIterations", "max-candidate-iterations", "int64_t",
-      /*default=*/"2000000",
-      "Total factoring iterations allowed for one candidate circuit, summed "
-      "over its attempts. This is the cap on a whole candidate, and so on the "
-      "worst-case time one rotation can take: max-factoring-iterations "
-      "applies to a single attempt, and max-factoring-restarts to a single "
-      "composite within it. Doubling this costs ~1.8x compile time for the "
-      "same T-count, so it bounds the tail rather than tuning quality.">,
-    Option<"maxFactoringRestarts", "max-factoring-restarts", "int32_t",
-      /*default=*/"8",
-      "Consecutive failed factoring attempts allowed on one composite before "
-      "the candidate is abandoned. Each attempt re-rolls a random parameter, "
-      "so a retry searches differently rather than repeating. Measured "
-      "restart chains succeed within a depth of 3, so the default of 8 leaves "
-      "ample margin.">,
-    Option<"maxOdgpScanSteps", "max-odgp-scan-steps", "int64_t",
-      /*default=*/"65536",
-      "Steps one candidate-enumeration line scan may take without producing a "
-      "candidate. Gridsynth finds candidate circuits by scanning along grid "
-      "lines, and a line carrying no candidate can otherwise be scanned "
-      "indefinitely. This governs the supply of candidates rather than the "
-      "effort spent on each, so starving it makes synthesis fail outright "
-      "rather than return a longer circuit.">,
-    Option<"retryCount", "retry-count", "int32_t", /*default=*/"3",
-      "Extra synthesis attempts for an angle gridsynth failed to synthesize. "
-      "Geometric backoff: the budget options above are the baseline, and "
-      "retry N re-runs the whole synthesis with them scaled by 2^N, so the "
-      "last retry runs at 2^retry-count times the baseline and the "
-      "worst-case total work for one angle is (2^(retry-count+1) - 1) times "
-      "it. Scaled: max-factoring-iterations, max-candidate-iterations and "
-      "max-odgp-scan-steps. Unscaled: max-factoring-restarts, which counts "
-      "consecutive failures on a single composite and holds its configured "
-      "value, since each attempt already re-rolls its own random parameter. "
-      "Set to 0 to attempt each angle once.">,
-    Option<"onDynamicAngle", "on-dynamic-angle", "std::string",
-      /*default=*/"\"error\"",
-      "Behavior on non-constant rotation angles: 'error' or 'skip'.">,
-    // TODO: Remove this option once controlled Clifford+T synthesis preserves
-    // the synthesis global phase.
-    Option<"failOnControlledRotation", "fail-on-controlled-rotation", "bool",
-      /*default=*/"false",
-      "Fail instead of preserving a controlled rotation that cannot be "
-      "synthesized without global-phase support.">,
-    Option<"skipBelow", "skip-below", "double", /*default=*/"1e-12",
-      "Erase (treat as identity) rotations whose |theta| is below this "
-      "threshold, rather than synthesizing a Clifford+T approximation for "
-      "them. Set to 0 to disable and synthesize every constant-angle "
-      "rotation.">,
+    Option<"raiseFailure", "raise-failure", "bool", /*default=*/"true",
+           "Emit an error and fail the pass when a wire is definitely "
+           "borrowed while already borrowed, or definitely never returned. "
+           "If false, these are emitted as warnings and the pass succeeds.">,
+    Option<"warnOnPossible", "warn-on-possible", "bool", /*default=*/"true",
+           "Emit a warning for a borrow that only possibly conflicts, or when "
+           "the wire being returned cannot be determined. If false, the "
+           "pass assumes such cases are correct and stays silent.">
   ];
-  let dependentDialects = ["mlir::arith::ArithDialect",
-                           "quake::QuakeDialect"];
-}
-
-def OptimizeSingleQubitCliffordT
-    : Pass<"optimize-1q-clifford-t", "mlir::ModuleOp"> {
-  let summary =
-    "Rewrite exact one-qubit Clifford+T chains to Matsumoto-Amano normal form.";
-  let description = [{
-    Consumes and produces the scalar linear SSA `!quake.wire` form created by
-    `convert-to-linear-values`.
-
-    Rewrites exact one-qubit Clifford+T chains on scalar `!quake.wire` values
-    into Matsumoto-Amano normal form while preserving the exact unitary.
-    Controlled chains are supported when their controls and polarities remain
-    unchanged, including through single-block `cc.scope` operations. The pass
-    optimizes the one-qubit gate sequence itself, not any subsequent
-    decomposition of its controlled gates.
-
-    The normal form is defined by K. Matsumoto and K. Amano, "Representation
-    of Quantum Circuits with Clifford and pi/8 Gates," arXiv:0806.3834,
-    https://arxiv.org/abs/0806.3834.
-
-  }];
-  let dependentDialects = ["mlir::arith::ArithDialect",
-                           "quake::QuakeDialect"];
-}
-
-def PruneNegligibleRotations
-    : Pass<"prune-negligible-rotations", "mlir::func::FuncOp"> {
-  let summary = "Erase constant-angle rotations that are effectively identity.";
-  let description = [{
-    Erases `quake.rz`, `quake.rx`, `quake.ry`, and `quake.r1` operations whose
-    constant angle has magnitude below `threshold`, treating them as the
-    identity. In memory semantics (`!quake.ref` targets) the op is simply
-    dropped and in value semantics (`!quake.wire` targets) the input wire is
-    threaded straight through to the users of the result.
-
-    Only uncontrolled rotations are pruned: a controlled rotation with a
-    negligible angle is left in place (materialize controls with
-    `ApplyOpSpecialization` first if pruning them matters). Non-constant and
-    non-finite angles are also left untouched.
-
-    This is the negligible-rotation pruning used internally by
-    `clifford-t-synthesis`, exposed as a standalone pass so it can be run
-    independently of Clifford+T synthesis.
-  }];
-  let options = [
-    Option<"threshold", "threshold", "double", /*default=*/"1e-12",
-      "Erase (treat as identity) rotations whose |theta| is below this "
-      "threshold. Set to 0 to disable.">,
-  ];
-  let dependentDialects = ["quake::QuakeDialect"];
 }
 
 def CableRoughIn : Pass<"cable-rough-in", "mlir::func::FuncOp"> {
@@ -402,6 +291,137 @@ def ClassicalOptimization : Pass<"classical-optimization"> {
       "Unroll only index use loops, i.e. loops whose induction variable is "
       "used in the loop body. See cc-loop-unroll.">
   ];
+}
+
+def CliffordTSynthesis : Pass<"clifford-t-synthesis", "mlir::ModuleOp"> {
+  let summary =
+    "Approximate constant-angle Rz rotations as Clifford+T sequences.";
+  let description = [{
+    Rewrites `quake.rz` operations with constant angles into sequences of
+    `quake.h`, `quake.s`, `quake.t`, and `quake.x` (Clifford+T) gates. The
+    synthesis algorithm is gridsynth (Ross & Selinger, arXiv:1403.2975)
+    provided by the embedded `cudaq::synth` library.
+
+    Only `quake.rz` is handled. `quake.rx`, `quake.ry`, and `quake.r1` must be
+    reduced to Rz first via the `RxToRz`, `RyToRz`, and `R1ToRz` decomposition
+    patterns; the `cudaq-fault-tolerant-target` pipeline runs that reduction
+    ahead of this pass. Any other rotation left in the IR is passed through
+    untouched.
+
+    Both memory semantics (`!quake.ref` targets, in-place) and value
+    semantics (`!quake.wire` targets, threaded) are handled. The synthesized
+    per-angle helper mirrors the form of the rotation it replaces.
+
+    An angle within `epsilon` of a multiple of `pi/4` is lowered to its exact
+    named-gate form rather than approximated. This repeats what
+    `quake-simplify{rotations-to-clifford-t=true}` does earlier, catching the
+    exact angles a pass in between creates.
+
+    Preconditions (must be enforced by upstream passes):
+    - Rx/Ry/R1 rotations are reduced to Rz - run the `decomposition` pass with
+      the `RxToRz`, `RyToRz`, `R1ToRz` patterns enabled first.
+    - Rotation angles are folded to constants - run `ArgumentSynthesis` and
+      constant-propagation passes first.
+    - Controls and adjoints are materialized - run `ApplyOpSpecialization`
+      first.
+
+    The omega global phase of each synthesized word is emitted as an
+    uncontrolled `quake.phase` in the helper body, so the helper is exactly
+    equal to the rotation it replaces. Run `lower-phase` afterwards to
+    complete the phase lifecycle; the `cudaq-fault-tolerant-target` pipeline
+    does.
+
+    Gridsynth is probabilistic. Unseeded, it may return a different (equally
+    valid) Clifford+T word for the same angle on every run. Set `seed` to make
+    the pass reproducible. Its cost grows sharply as `epsilon` tightens.
+    Roughly 2 ms per distinct rotation at the default 1e-10, but orders of
+    magnitude more below 1e-30. Repeated angles are cached, so the cost is per
+    distinct angle rather than per operation. This pass is opt-in via the
+    `cudaq-fault-tolerant-target` pipeline only. It is not added to the default
+    target-prep pipeline.
+
+    The work-budget options below cap the search work gridsynth may spend on
+    each rotation. They trade compile time against T-count: raise
+    `max-factoring-iterations` for shorter circuits, and the rest to widen the
+    worst case a single angle is allowed to reach. See `GridsynthOptions.h`
+    for what each one bounds in the algorithm and for the measurements behind
+    the defaults.
+  }];
+  let options = [
+    Option<"epsilon", "epsilon", "double", /*default=*/"1e-10",
+      "Approximation tolerance epsilon for Clifford+T synthesis.">,
+    Option<"maxFactoringIterations", "max-factoring-iterations", "int64_t",
+      /*default=*/"500000",
+      "Gridsynth tests a candidate circuit by factoring an integer derived "
+      "from it (Algorithm 7.6, step 2b). This implementation factors with "
+      "Pollard-Brent rho, a randomized method that either finds a factor or "
+      "gives up, and this option caps the iterations one attempt may spend "
+      "on its composite. Factoring is where nearly all synthesis time goes, "
+      "so a lower cap is faster on every call; the cost is that abandoning a "
+      "candidate pushes the answer onto a later one, whose denominator "
+      "exponent -- and so T-count -- is at least as large. Raise this one to "
+      "trade compile time for shorter circuits.">,
+    Option<"maxCandidateIterations", "max-candidate-iterations", "int64_t",
+      /*default=*/"2000000",
+      "Total factoring iterations allowed for one candidate circuit, summed "
+      "over its attempts. This is the cap on a whole candidate, and so on the "
+      "worst-case time one rotation can take: max-factoring-iterations "
+      "applies to a single attempt, and max-factoring-restarts to a single "
+      "composite within it. Doubling this costs ~1.8x compile time for the "
+      "same T-count, so it bounds the tail rather than tuning quality.">,
+    Option<"maxFactoringRestarts", "max-factoring-restarts", "int32_t",
+      /*default=*/"8",
+      "Consecutive failed factoring attempts allowed on one composite before "
+      "the candidate is abandoned. Each attempt re-rolls a random parameter, "
+      "so a retry searches differently rather than repeating. Measured "
+      "restart chains succeed within a depth of 3, so the default of 8 leaves "
+      "ample margin.">,
+    Option<"maxOdgpScanSteps", "max-odgp-scan-steps", "int64_t",
+      /*default=*/"65536",
+      "Steps one candidate-enumeration line scan may take without producing a "
+      "candidate. Gridsynth finds candidate circuits by scanning along grid "
+      "lines, and a line carrying no candidate can otherwise be scanned "
+      "indefinitely. This governs the supply of candidates rather than the "
+      "effort spent on each, so starving it makes synthesis fail outright "
+      "rather than return a longer circuit.">,
+    Option<"retryCount", "retry-count", "int32_t", /*default=*/"3",
+      "Extra synthesis attempts for an angle gridsynth failed to synthesize. "
+      "Geometric backoff: the budget options above are the baseline, and "
+      "retry N re-runs the whole synthesis with them scaled by 2^N, so the "
+      "last retry runs at 2^retry-count times the baseline and the "
+      "worst-case total work for one angle is (2^(retry-count+1) - 1) times "
+      "it. Scaled: max-factoring-iterations, max-candidate-iterations and "
+      "max-odgp-scan-steps. Unscaled: max-factoring-restarts, which counts "
+      "consecutive failures on a single composite and holds its configured "
+      "value, since each attempt already re-rolls its own random parameter. "
+      "Set to 0 to attempt each angle once.">,
+    Option<"onDynamicAngle", "on-dynamic-angle", "std::string",
+      /*default=*/"\"error\"",
+      "Behavior on non-constant rotation angles: 'error' or 'skip'.">,
+    // TODO: Remove this option once controlled Clifford+T synthesis preserves
+    // the synthesis global phase.
+    Option<"failOnControlledRotation", "fail-on-controlled-rotation", "bool",
+      /*default=*/"false",
+      "Fail instead of preserving a controlled rotation that cannot be "
+      "synthesized without global-phase support.">,
+    Option<"seed", "seed", "uint64_t", /*default=*/"0",
+      "Seed for the randomized integer factoring gridsynth uses to test a "
+      "candidate circuit. Set this to make synthesis reproducible. The same "
+      "seed, angle, epsilon, and budgets always produce the same circuit. 0 "
+      "means unseeded. Targets that want reproducible synthesis set this from "
+      "`cudaq::set_random_seed` through their config.">,
+    Option<"skipBelow", "skip-below", "double", /*default=*/"1e-12",
+      "Erase (treat as identity) rotations whose |theta| is below this "
+      "threshold, rather than synthesizing a Clifford+T approximation for "
+      "them. Set to 0 to disable and synthesize every constant-angle "
+      "rotation.">,
+  ];
+  let statistics = [
+    Statistic<"numExactRotations", "exact-rotations",
+              "Number of rotations lowered exactly instead of approximated">,
+  ];
+  let dependentDialects = ["mlir::arith::ArithDialect",
+                           "quake::QuakeDialect"];
 }
 
 def CombineMeasurements :
@@ -490,6 +510,61 @@ def ConstantPropagation : Pass<"constant-propagation", "mlir::func::FuncOp"> {
   let description = [{
     This is a greedy pass that will push constants from single and
     multidimensional array constants to their ultimate uses.
+  }];
+}
+
+def ConvertToCFG : Pass<"convert-to-cfg"> {
+  let summary = "Erase CLoop, CIf, etc. ops, replacing them with a CFG.";
+  let description = [{
+    This pass converts high-level control flow ops to a more primitive basic
+    CFG structure.
+
+    For example, a `quake.loop` model of a C `for` loop
+    ```mlir
+    quake.loop while {
+      // while code
+      quake.condition %cond
+    } do {
+      // loop body
+    } step {
+      // step body
+    }
+    // exit loop
+    ```
+    will be rewritten to
+    ```mlir
+    ^bb23:
+      // while code
+      cf.cond_br %cond, ^bb24, ^bb26
+    ^bb24:
+      // loop body
+      cf.br ^bb25
+    ^bb25:
+      // step body
+      cf.br ^bb23
+    ^bb26:
+      // exit loop
+    ```
+  }];
+
+  let options = [
+    Option<"unsafeQuantumAlloc", "unsafe-quantum-alloc", "bool",
+           /*default=*/"false",
+           "When true, suppress adding the cc.no_qubit_combine attribute when "
+           "lowering a cc.scope that contains a quantum allocation.  This is "
+           "unsafe in general (the subsequent combine-quantum-alloc pass may "
+           "combine allocations across scope boundaries), but useful when "
+           "lower-to-cfg is followed immediately by combine-quantum-alloc and "
+           "factor-quantum-alloc, as in the quake_fake mid-level pipeline.">
+  ];
+
+  let dependentDialects = [ "mlir::cf::ControlFlowDialect" ];
+}
+
+def ConvertToCFGPrep : Pass<"convert-to-cfg-prep", "mlir::ModuleOp"> {
+  let summary = "Prepare the Module to be converted to a CFG.";
+  let description = [{
+    This pass must be run before the ConvertToCFG pass.
   }];
 }
 
@@ -656,22 +731,20 @@ def DesugarCableOps : Pass<"desugar-cable-ops"> {
 }
 
 def DistributedDeviceCall : Pass<"distributed-device-call", "mlir::ModuleOp"> {
-  let summary = "Translate cc.device_call operations";
+  let summary = "Translate cc.device_call operations to the generalized "
+                "distributed-memory reference implementation";
 
   let description = [{
-    Perform the translation of cc.device_call to a set of substeps for a
-    distributed memory model.
+    Lower cc.device_call to the generalized, distributed-memory reference
+    implementation: autogenerate marshal/unmarshal functions that reuse the
+    kernel-launch thunk buffer format and dispatch through the runtime's
+    callback hook. This is required if different processing units in the
+    aggregate QPU have distributed (not shared) memory spaces. Also resolves
+    cc.resolve_device_ptr operations.
   }];
 
-  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
-
-  let options = [
-    Option<"insertTrapImplementation", "insert-trap", "bool",
-      /*default=*/"false",
-      "Enable pass to insert a default implementation (runtime trap) for "
-      "device call (default=false). The default implementation has weak "
-      "linkage, i.e., allowed to be overridden at link time.">
-  ];
+  let dependentDialects = ["mlir::LLVM::LLVMDialect",
+                           "mlir::cf::ControlFlowDialect"];
 }
 
 def EraseNoise : Pass<"erase-noise"> {
@@ -1088,6 +1161,73 @@ def LinearCtrlRelations : Pass<"linear-ctrl-form", "mlir::func::FuncOp"> {
   }];
 }
 
+def LoopCableRotation : Pass<"loop-cable-rotation", "mlir::func::FuncOp"> {
+  let summary = "Rotate a cable around a counted loop over a fixed-size veq.";
+  let description = [{
+    A `cc.loop` that is a compile-time counted loop (a normalized, definite
+    trip count, no early exit - see `isaCountedLoop` in `LoopAnalysis.h`)
+    whose body contains exactly one `quake.extract_ref` indexing a
+    statically sized `veq` by the loop's own induction variable touches
+    every qubit of that `veq` exactly once, in order. Each iteration
+    ordinarily still pays for reference-form traffic (`unwrap`/gate/`wrap`)
+    even though the whole access pattern is known statically.
+
+    This pass rewrites that shape to thread a single `!quake.cable<C>`
+    value around the loop instead of leaving the `veq` in reference form:
+    a `quake.detach_wire` pulls the front wire off the cable in place of
+    the `extract_ref` each iteration, and a `quake.attach_wire` puts it
+    back on the back before the iteration ends, so after all `C`
+    iterations the cable is back in its original order. The detached wire
+    is bound to a fresh reference with `quake.wrap_new` so the body's gate
+    ops are left completely unchanged in reference form; this pass does
+    not itself linearize them; the existing `memtoreg` pass, run
+    afterwards, threads `quake.wrap_new`'s fresh reference into proper wire
+    SSA form the same way it already does elsewhere.
+
+    This pass is independent of, and does not modify, `cable-rough-in` -
+    that pass handles a whole veq passed to a call; this one handles a veq
+    walked element-by-element inside a loop. A loop that does not match
+    the required shape exactly (early exit, non-constant trip count, more
+    than one `extract_ref` in the body, an index expression other than the
+    bare induction variable, a `veq` of unknown size, or a `veq` with any
+    other use inside the loop) is left completely untouched.
+  }];
+}
+
+def LoopInductionFusion : Pass<"cc-loop-induction-fusion"> {
+  let summary = "Fuse secondary loop inductions into the primary induction.";
+  let description = [{
+    For a normalized cc.loop (one that has already been through
+    cc-loop-normalize so the primary control induction starts at 0 and steps by
+    1), any additional loop-carried integer values that step by a loop-invariant
+    amount on every iteration are *secondary inductions*.  They are linear
+    functions of the primary induction variable `i`:
+
+    ```
+      j(i) = j_initial ± i * step_j
+    ```
+
+    This pass replaces every use of a secondary induction's block argument in
+    the loop body with the closed-form expression above, then removes the
+    secondary from the loop's carried-value set.  The final value of each
+    secondary after the loop is replaced in the parent block by substituting
+    the loop's primary result:
+
+    ```
+      j_final = j_initial ± loop_result_i * step_j
+    ```
+
+    The loop must be in invariant form: primary starts at 0 and steps by 1.
+    Loops stamped with the `normalized` attribute by `cc-loop-normalize`
+    satisfy this, but the pass also accepts any loop already in that form
+    without the attribute.  If the loop is not in invariant form, or has no
+    secondary inductions, the pass is a no-op for that loop.
+  }];
+
+  let dependentDialects = ["mlir::arith::ArithDialect",
+                           "cudaq::cc::CCDialect"];
+}
+
 def LoopNormalize : Pass<"cc-loop-normalize"> {
   let summary = "Normalize classical compute (C++) loops.";
   let description = [{
@@ -1187,138 +1327,17 @@ def LoopUnroll : Pass<"cc-loop-unroll"> {
   ];
 }
 
-def LoopCableRotation : Pass<"loop-cable-rotation", "mlir::func::FuncOp"> {
-  let summary = "Rotate a cable around a counted loop over a fixed-size veq.";
-  let description = [{
-    A `cc.loop` that is a compile-time counted loop (a normalized, definite
-    trip count, no early exit - see `isaCountedLoop` in `LoopAnalysis.h`)
-    whose body contains exactly one `quake.extract_ref` indexing a
-    statically sized `veq` by the loop's own induction variable touches
-    every qubit of that `veq` exactly once, in order. Each iteration
-    ordinarily still pays for reference-form traffic (`unwrap`/gate/`wrap`)
-    even though the whole access pattern is known statically.
-
-    This pass rewrites that shape to thread a single `!quake.cable<C>`
-    value around the loop instead of leaving the `veq` in reference form:
-    a `quake.detach_wire` pulls the front wire off the cable in place of
-    the `extract_ref` each iteration, and a `quake.attach_wire` puts it
-    back on the back before the iteration ends, so after all `C`
-    iterations the cable is back in its original order. The detached wire
-    is bound to a fresh reference with `quake.wrap_new` so the body's gate
-    ops are left completely unchanged in reference form; this pass does
-    not itself linearize them; the existing `memtoreg` pass, run
-    afterwards, threads `quake.wrap_new`'s fresh reference into proper wire
-    SSA form the same way it already does elsewhere.
-
-    This pass is independent of, and does not modify, `cable-rough-in` -
-    that pass handles a whole veq passed to a call; this one handles a veq
-    walked element-by-element inside a loop. A loop that does not match
-    the required shape exactly (early exit, non-constant trip count, more
-    than one `extract_ref` in the body, an index expression other than the
-    bare induction variable, a `veq` of unknown size, or a `veq` with any
-    other use inside the loop) is left completely untouched.
-  }];
-}
-
-def LoopInductionFusion : Pass<"cc-loop-induction-fusion"> {
-  let summary = "Fuse secondary loop inductions into the primary induction.";
-  let description = [{
-    For a normalized cc.loop (one that has already been through
-    cc-loop-normalize so the primary control induction starts at 0 and steps by
-    1), any additional loop-carried integer values that step by a loop-invariant
-    amount on every iteration are *secondary inductions*.  They are linear
-    functions of the primary induction variable `i`:
-
-    ```
-      j(i) = j_initial ± i * step_j
-    ```
-
-    This pass replaces every use of a secondary induction's block argument in
-    the loop body with the closed-form expression above, then removes the
-    secondary from the loop's carried-value set.  The final value of each
-    secondary after the loop is replaced in the parent block by substituting
-    the loop's primary result:
-
-    ```
-      j_final = j_initial ± loop_result_i * step_j
-    ```
-
-    The loop must be in invariant form: primary starts at 0 and steps by 1.
-    Loops stamped with the `normalized` attribute by `cc-loop-normalize`
-    satisfy this, but the pass also accepts any loop already in that form
-    without the attribute.  If the loop is not in invariant form, or has no
-    secondary inductions, the pass is a no-op for that loop.
-  }];
-
-  let dependentDialects = ["mlir::arith::ArithDialect",
-                           "cudaq::cc::CCDialect"];
-}
-
 def LowerPhase : Pass<"lower-phase", "mlir::func::FuncOp"> {
   let summary = "Lower phase bookkeeping operations to ordinary Quake gates";
   let description = [{
     Lowers controlled `quake.phase` operations to exact `quake.r1`/`quake.rz`
     gate sequences and erases uncontrolled phases after forwarding their wire
-    results. This pass is intentionally exposed in isolation until the global
-    phase lifecycle is integrated into production pipelines.
+    results. It remains independently invocable for tests and custom pipeline
+    composition; production pipelines invoke it through the shared phase
+    lifecycle before code generation.
   }];
   let dependentDialects = ["mlir::arith::ArithDialect",
                            "cudaq::quake::QuakeDialect"];
-}
-
-def ConvertToCFG : Pass<"convert-to-cfg"> {
-  let summary = "Erase CLoop, CIf, etc. ops, replacing them with a CFG.";
-  let description = [{
-    This pass converts high-level control flow ops to a more primitive basic
-    CFG structure.
-
-    For example, a `quake.loop` model of a C `for` loop
-    ```mlir
-    quake.loop while {
-      // while code
-      quake.condition %cond
-    } do {
-      // loop body
-    } step {
-      // step body
-    }
-    // exit loop
-    ```
-    will be rewritten to
-    ```mlir
-    ^bb23:
-      // while code
-      cf.cond_br %cond, ^bb24, ^bb26
-    ^bb24:
-      // loop body
-      cf.br ^bb25
-    ^bb25:
-      // step body
-      cf.br ^bb23
-    ^bb26:
-      // exit loop
-    ```
-  }];
-
-  let options = [
-    Option<"unsafeQuantumAlloc", "unsafe-quantum-alloc", "bool",
-           /*default=*/"false",
-           "When true, suppress adding the cc.no_qubit_combine attribute when "
-           "lowering a cc.scope that contains a quantum allocation.  This is "
-           "unsafe in general (the subsequent combine-quantum-alloc pass may "
-           "combine allocations across scope boundaries), but useful when "
-           "lower-to-cfg is followed immediately by combine-quantum-alloc and "
-           "factor-quantum-alloc, as in the quake_fake mid-level pipeline.">
-  ];
-
-  let dependentDialects = [ "mlir::cf::ControlFlowDialect" ];
-}
-
-def ConvertToCFGPrep : Pass<"convert-to-cfg-prep", "mlir::ModuleOp"> {
-  let summary = "Prepare the Module to be converted to a CFG.";
-  let description = [{
-    This pass must be run before the ConvertToCFG pass.
-  }];
 }
 
 def MappingFunc: Pass<"qubit-mapping-func", "mlir::func::FuncOp"> {
@@ -1466,6 +1485,13 @@ def MemToReg : Pass<"memtoreg", "mlir::func::FuncOp"> {
     quantum information by reference, etc. A `wire` value does not have ordinary
     SSA semantics. A use can destroy the value itself, therefore it is required
     that `wire` values be threads in and out of each and every use.
+
+    The aliasing analysis is fail-safe: a qubit it cannot prove is reached only
+    through a single reference is left in memory form, which is never wrong but
+    is also silent. Statistics are available to make that pessimization
+    measurable, so an unmodelled op or a pipeline reordering shows up as a
+    number rather than as mysteriously worse output. Use -debug-only=memtoreg
+    to see which op forced a given qubit into memory form.
   }];
   let dependentDialects = ["cudaq::cc::CCDialect",
     "cudaq::quake::QuakeDialect"];
@@ -1480,7 +1506,12 @@ def MemToReg : Pass<"memtoreg", "mlir::func::FuncOp"> {
     Statistic<"numProcessOpWithRegionsCalls", "process-op-with-regions-calls",
       "Number of times processOpWithRegions was called">,
     Statistic<"numWorklistIterations", "worklist-iterations",
-      "Number of worklist loop iterations in processOpWithRegions">
+      "Number of worklist loop iterations in processOpWithRegions">,
+    Statistic<"numBlacklistedRefs", "blacklisted-refs",
+      "Number of quantum references left in memory form because the qubit "
+      "they name is also reached through memory">,
+    Statistic<"numPromotedLocations", "promoted-locations",
+      "Number of distinct qubit locations promoted to wire values">
   ];
 }
 
@@ -1553,6 +1584,30 @@ def ObserveAnsatz : Pass<"observe-ansatz", "mlir::func::FuncOp"> {
       "The measurement bases as a Pauli tensor product represented in binary "
       "symplectic form.">
   ];
+}
+
+def OptimizeSingleQubitCliffordT
+    : Pass<"optimize-1q-clifford-t", "mlir::ModuleOp"> {
+  let summary =
+    "Rewrite exact one-qubit Clifford+T chains to Matsumoto-Amano normal form.";
+  let description = [{
+    Consumes and produces the scalar linear SSA `!quake.wire` form created by
+    `convert-to-linear-values`.
+
+    Rewrites exact one-qubit Clifford+T chains on scalar `!quake.wire` values
+    into Matsumoto-Amano normal form while preserving the exact unitary.
+    Controlled chains are supported when their controls and polarities remain
+    unchanged, including through single-block `cc.scope` operations. The pass
+    optimizes the one-qubit gate sequence itself, not any subsequent
+    decomposition of its controlled gates.
+
+    The normal form is defined by K. Matsumoto and K. Amano, "Representation
+    of Quantum Circuits with Clifford and pi/8 Gates," arXiv:0806.3834,
+    https://arxiv.org/abs/0806.3834.
+
+  }];
+  let dependentDialects = ["mlir::arith::ArithDialect",
+                           "quake::QuakeDialect"];
 }
 
 def PhaseFolding: Pass<"phase-folding", "mlir::func::FuncOp"> {
@@ -1628,6 +1683,33 @@ def PruneCtrlRelations : Pass<"pruned-ctrl-form", "mlir::func::FuncOp"> {
   }];
 }
 
+def PruneNegligibleRotations
+    : Pass<"prune-negligible-rotations", "mlir::func::FuncOp"> {
+  let summary = "Erase constant-angle rotations that are effectively identity.";
+  let description = [{
+    Erases `quake.rz`, `quake.rx`, `quake.ry`, and `quake.r1` operations whose
+    constant angle has magnitude below `threshold`, treating them as the
+    identity. In memory semantics (`!quake.ref` targets) the op is simply
+    dropped and in value semantics (`!quake.wire` targets) the input wire is
+    threaded straight through to the users of the result.
+
+    Only uncontrolled rotations are pruned: a controlled rotation with a
+    negligible angle is left in place (materialize controls with
+    `ApplyOpSpecialization` first if pruning them matters). Non-constant and
+    non-finite angles are also left untouched.
+
+    This is the negligible-rotation pruning used internally by
+    `clifford-t-synthesis`, exposed as a standalone pass so it can be run
+    independently of Clifford+T synthesis.
+  }];
+  let options = [
+    Option<"threshold", "threshold", "double", /*default=*/"1e-12",
+      "Erase (treat as identity) rotations whose |theta| is below this "
+      "threshold. Set to 0 to disable.">,
+  ];
+  let dependentDialects = ["quake::QuakeDialect"];
+}
+
 def PyFrontendCleanup : Pass<"py-frontend-cleanup", "mlir::func::FuncOp"> {
   let summary = "Clean up IR residue specific to the Python AST bridge.";
   let description = [{
@@ -1660,20 +1742,26 @@ def PySynthCallableBlockArgs :
   }];
 }
 
-def QuakeSynthesize : Pass<"quake-synth", "mlir::ModuleOp"> {
-  let summary =
-    "Synthesize concrete quantum program from Quake code plus runtime values.";
+def QIRDeviceCall : Pass<"qir-device-call", "mlir::ModuleOp"> {
+  let summary = "Translate cc.device_call operations to a QIR-vendor passthrough";
+
   let description = [{
-    Convert Quake representing a dynamic quantum kernel to Quake
-    representing a concrete quantum program instance using known
-     runtime values.
+    Lower cc.device_call to a QIR-vendor style passthrough call: encode a
+    stable per-callback id (via an MD5 hash of the callee name) as a
+    `passthrough` function attribute on the callee and replace the
+    device_call with a direct call, letting a vendor's runtime resolve the
+    callback out of band. Also resolves cc.resolve_device_ptr operations.
   }];
 
-  let dependentDialects = ["mlir::arith::ArithDialect",
-                           "mlir::complex::ComplexDialect",
-                           "cudaq::cc::CCDialect", "mlir::math::MathDialect"];
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 
-  let constructor = "cudaq::opt::createQuakeSynthesizer()";
+  let options = [
+    Option<"insertTrapImplementation", "insert-trap", "bool",
+      /*default=*/"false",
+      "Enable pass to insert a default implementation (runtime trap) for "
+      "device call (default=false). The default implementation has weak "
+      "linkage, i.e., allowed to be overridden at link time.">
+  ];
 }
 
 def QuakeAddMetadata : Pass<"quake-add-metadata", "mlir::func::FuncOp"> {
@@ -1763,6 +1851,22 @@ def QuakeSimplify : Pass<"quake-simplify"> {
     Statistic<"numCliffordTRotations", "clifford-t-rotations",
               "Number of rotations canonicalized to Clifford+T gates">,
   ];
+}
+
+def QuakeSynthesize : Pass<"quake-synth", "mlir::ModuleOp"> {
+  let summary =
+    "Synthesize concrete quantum program from Quake code plus runtime values.";
+  let description = [{
+    Convert Quake representing a dynamic quantum kernel to Quake
+    representing a concrete quantum program instance using known
+     runtime values.
+  }];
+
+  let dependentDialects = ["mlir::arith::ArithDialect",
+                           "mlir::complex::ComplexDialect",
+                           "cudaq::cc::CCDialect", "mlir::math::MathDialect"];
+
+  let constructor = "cudaq::opt::createQuakeSynthesizer()";
 }
 
 def QubitResetBeforeReuse :
@@ -2147,34 +2251,6 @@ def UnitarySynthesis : Pass<"unitary-synthesis", "mlir::ModuleOp"> {
     "mlir::func::FuncDialect"];
 }
 
-def UnwindLowering : Pass<"unwind-lowering", "mlir::func::FuncOp"> {
-  let summary = "Lower global unwinding control-flow macros to a CFG.";
-  let description = [{
-    In C++, statements such as `return`, `break`, and `continue` are global
-    transfers of control. The control-flow does not necessarily return to the
-    next Operation in the Block containing the parent Op. Furthermore, this
-    global jumps may imply additional operations depending on the context.
-    These operations are stack unwinding operations (within an activation
-    frame) that may include calling destructors, deallocations, automatic
-    uncomputation, etc.
-
-    `continue` and `break` may only be present in the context of a loop
-    currently. The unwinding macros are matched to the nearest enclosing loop
-    structure and the body of the loop is expanded to a CFG to expose the
-    general control flow within the loop.
-
-    `return` may be present in any context. The full context from the innermost
-    structured op containing the unwinding return to the body of the function
-    is lowered to a CFG form to expose the general control flow implied.
-
-    The lower to CFG pass removed all structured operations from a function,
-    lowering the body of the function completely to a primitive CFG.
-  }];
-
-  let dependentDialects = ["mlir::cf::ControlFlowDialect",
-    "cudaq::quake::QuakeDialect", "cudaq::cc::CCDialect"];
-}
-
 def UnwindByDataFlow : Pass<"unwind-by-dataflow", "mlir::func::FuncOp"> {
   let summary = "Lower unwind control-flow macros to data-flow flag variables.";
   let description = [{
@@ -2203,6 +2279,34 @@ def UnwindByDataFlow : Pass<"unwind-by-dataflow", "mlir::func::FuncOp"> {
   }];
   let dependentDialects = ["mlir::arith::ArithDialect", "cudaq::cc::CCDialect",
     "mlir::func::FuncDialect"];
+}
+
+def UnwindLowering : Pass<"unwind-lowering", "mlir::func::FuncOp"> {
+  let summary = "Lower global unwinding control-flow macros to a CFG.";
+  let description = [{
+    In C++, statements such as `return`, `break`, and `continue` are global
+    transfers of control. The control-flow does not necessarily return to the
+    next Operation in the Block containing the parent Op. Furthermore, this
+    global jumps may imply additional operations depending on the context.
+    These operations are stack unwinding operations (within an activation
+    frame) that may include calling destructors, deallocations, automatic
+    uncomputation, etc.
+
+    `continue` and `break` may only be present in the context of a loop
+    currently. The unwinding macros are matched to the nearest enclosing loop
+    structure and the body of the loop is expanded to a CFG to expose the
+    general control flow within the loop.
+
+    `return` may be present in any context. The full context from the innermost
+    structured op containing the unwinding return to the body of the function
+    is lowered to a CFG form to expose the general control flow implied.
+
+    The lower to CFG pass removed all structured operations from a function,
+    lowering the body of the function completely to a primitive CFG.
+  }];
+
+  let dependentDialects = ["mlir::cf::ControlFlowDialect",
+    "cudaq::quake::QuakeDialect", "cudaq::cc::CCDialect"];
 }
 
 def UpdateRegisterNames : Pass<"update-register-names"> {
