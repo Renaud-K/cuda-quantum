@@ -6,6 +6,8 @@
  * the terms of the Apache License 2.0 which accompanies this distribution.    *
  ******************************************************************************/
 
+#include "cudaq_realtime_dispatcher_images.h"
+#include "device_link.h"
 #include "cudaq/realtime/daemon/bridge/bridge_interface.h"
 #include "cudaq/realtime/daemon/dispatcher/cudaq_realtime.h"
 #include "cudaq/realtime/daemon/dispatcher/graph_launch_engine.h"
@@ -15,13 +17,10 @@
 #include <cstring>
 #include <mutex>
 #include <new>
+#include <string>
 #include <thread>
 #include <unordered_set>
-
-// Defined in libcudaq-realtime-dispatch.a, which the consumer device-links
-// together with its handlers; it is not part of this library.  Weak, so a
-// binary that never links the archive still loads, and the address is null.
-#pragma weak cudaq_launch_unified_dispatch_device
+#include <vector>
 
 struct cudaq_dispatch_manager_t {
   int reserved = 0;
@@ -52,6 +51,14 @@ struct cudaq_dispatcher_t {
   cudaq_graph_launch_engine_t *engine = nullptr;
   // The bridge wired by cudaq_dispatcher_set_bridge, if any.
   cudaq_realtime_bridge_handle_t bridge = nullptr;
+  // DEVICE + UNIFIED without a launch override: the bridge's GPU data plane,
+  // copied by set_bridge (its ctx is also `transport_ctx`), the module
+  // set_device_code linked and loaded, its unified kernel, and the handler
+  // addresses get_device_function handed out of it.
+  cudaq_gpu_dataplane_t gpu_dataplane{};
+  cudaLibrary_t device_library = nullptr;
+  cudaKernel_t unified_kernel = nullptr;
+  std::unordered_set<void *> device_functions;
 };
 
 namespace {
@@ -131,10 +138,9 @@ static cudaq_status_t validate_dispatcher(cudaq_dispatcher_t *dispatcher) {
   if (dispatcher->config.kernel_type == CUDAQ_KERNEL_UNIFIED) {
     if (!dispatcher->transport_ctx)
       return CUDAQ_ERR_INVALID_ARG;
-    // Without an override, the unified kernel must have been linked into the
-    // consumer from libcudaq-realtime-dispatch.a.
-    if (!dispatcher->unified_launch_fn &&
-        !&cudaq_launch_unified_dispatch_device)
+    // Without an override, the unified kernel exists only once
+    // set_device_code has linked it.
+    if (!dispatcher->unified_launch_fn && !dispatcher->unified_kernel)
       return CUDAQ_ERR_INVALID_ARG;
     if (dispatcher->config.slot_size == 0)
       return CUDAQ_ERR_INVALID_ARG;
@@ -200,6 +206,54 @@ apply_bridge_geometry(cudaq_realtime_bridge_handle_t bridge,
   return CUDAQ_OK;
 }
 
+// A legacy-stream cudaMemcpy would queue behind any persistent dispatch
+// kernel already resident (another dispatcher's), so copy on a private
+// non-blocking stream.
+static cudaError_t copy_to_host(void *dst, const void *src, size_t bytes) {
+  cudaStream_t stream = nullptr;
+  cudaError_t err = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+  if (err != cudaSuccess)
+    return err;
+  err = cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream);
+  if (err == cudaSuccess)
+    err = cudaStreamSynchronize(stream);
+  cudaStreamDestroy(stream);
+  return err;
+}
+
+// Refuse DEVICE_CALL entries whose handler pointer did not come out of the
+// linked module.  Any other address (typically `&handler` taken in the
+// application's own module) is not code in the kernel's module, and the
+// first request would fault with an illegal instruction.
+static cudaq_status_t
+check_linked_handlers(const cudaq_dispatcher_t *dispatcher) {
+  const cudaq_function_table_t &table = dispatcher->table;
+  std::vector<cudaq_function_entry_t> entries(table.count);
+  const cudaError_t err = copy_to_host(entries.data(), table.entries,
+                                       table.count * sizeof(entries[0]));
+  if (err != cudaSuccess) {
+    fprintf(stderr,
+            "ERROR: cudaq_dispatcher_start (DEVICE unified): reading the "
+            "function table failed: %s\n",
+            cudaGetErrorString(err));
+    return CUDAQ_ERR_CUDA;
+  }
+  for (uint32_t i = 0; i < table.count; ++i) {
+    if (entries[i].dispatch_mode != CUDAQ_DISPATCH_DEVICE_CALL)
+      continue;
+    if (!dispatcher->device_functions.count(entries[i].handler.device_fn_ptr)) {
+      fprintf(stderr,
+              "ERROR: cudaq_dispatcher_start (DEVICE unified): entry %u "
+              "(function_id 0x%08x) has handler %p, which "
+              "cudaq_dispatcher_get_device_function did not return; take "
+              "handler addresses from the linked module\n",
+              i, entries[i].function_id, entries[i].handler.device_fn_ptr);
+      return CUDAQ_ERR_INVALID_ARG;
+    }
+  }
+  return CUDAQ_OK;
+}
+
 cudaq_status_t
 cudaq_dispatch_manager_create(cudaq_dispatch_manager_t **out_mgr) {
   if (!out_mgr)
@@ -248,6 +302,10 @@ cudaq_status_t cudaq_dispatcher_destroy(cudaq_dispatcher_t *dispatcher) {
     }
     dispatcher->running = false;
   }
+  // A DEVICE kernel destroy() did not stop may still be running from this
+  // module, so the module is only unloaded when the dispatcher was stopped.
+  if (dispatcher->device_library && !dispatcher->stream)
+    cudaLibraryUnload(dispatcher->device_library);
   if (dispatcher->bridge)
     release_bridge_attachment(dispatcher->bridge);
   delete dispatcher;
@@ -309,10 +367,9 @@ cudaq_status_t
 cudaq_dispatcher_set_unified_launch(cudaq_dispatcher_t *dispatcher,
                                     cudaq_unified_launch_fn_t unified_launch_fn,
                                     void *transport_ctx) {
-  // A NULL fn selects the unified kernel from libcudaq-realtime-dispatch.a
-  // (start() fails if the consumer did not link it); the context is required
-  // either way.
-  if (!dispatcher || !transport_ctx)
+  // The dispatcher's own unified kernel is linked at runtime against a
+  // bridge's GPU data plane, so this setter only takes an override.
+  if (!dispatcher || !unified_launch_fn || !transport_ctx)
     return CUDAQ_ERR_INVALID_ARG;
   dispatcher->unified_launch_fn = unified_launch_fn;
   dispatcher->transport_ctx = transport_ctx;
@@ -350,6 +407,7 @@ cudaq_dispatcher_set_bridge(cudaq_dispatcher_t *dispatcher,
 
   cudaq_ringbuffer_t ring{};
   cudaq_cpu_dataplane_t cpu_dataplane{};
+  cudaq_gpu_dataplane_t gpu_dataplane{};
   cudaq_unified_dispatch_ctx_t unified_ctx{};
   if (!unified) {
     status = cudaq_bridge_get_transport_context(bridge, RING_BUFFER, &ring);
@@ -398,24 +456,51 @@ cudaq_dispatcher_set_bridge(cudaq_dispatcher_t *dispatcher,
       return CUDAQ_ERR_INVALID_ARG;
     }
   } else {
-    status = cudaq_bridge_get_transport_context(bridge, UNIFIED, &unified_ctx);
-    if (status != CUDAQ_OK) {
+    status = cudaq_bridge_get_gpu_dataplane(bridge, &gpu_dataplane);
+    if (status == CUDAQ_OK) {
+      // set_device_code links this device code; the kernel hands ctx to it.
+      if (!gpu_dataplane.ctx || !gpu_dataplane.device_code ||
+          gpu_dataplane.device_code_count == 0) {
+        fprintf(stderr,
+                "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge returned "
+                "an incomplete GPU data plane\n",
+                shape);
+        return CUDAQ_ERR_INVALID_ARG;
+      }
+    } else if (status != CUDAQ_ERR_UNSUPPORTED) {
       fprintf(stderr,
-              "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge serves no "
-              "unified context (status %d); the provider must be started in "
-              "its unified mode\n",
+              "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge failed to "
+              "report its GPU data plane (status %d)\n",
               shape, status);
       return status;
-    }
-    // A provider whose unified loop runs on the host answers with no device
-    // context at all.
-    if (!unified_ctx.transport_ctx) {
-      fprintf(stderr,
-              "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge has no "
-              "device-side data plane; its unified loop runs on the host "
-              "(use CUDAQ_DISPATCH_PATH_HOST)\n",
-              shape);
-      return CUDAQ_ERR_UNSUPPORTED;
+    } else {
+      // No GPU data plane: the only other DEVICE unified shape is a provider
+      // that replaces the dispatch loop with its own kernel.
+      status =
+          cudaq_bridge_get_transport_context(bridge, UNIFIED, &unified_ctx);
+      if (status != CUDAQ_OK) {
+        fprintf(stderr,
+                "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge serves "
+                "neither a GPU data plane nor a unified context (status %d); "
+                "the provider must be started in its unified mode\n",
+                shape, status);
+        return status;
+      }
+      if (!unified_ctx.launch_fn) {
+        fprintf(stderr,
+                "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge has no "
+                "device-side data plane; its unified loop runs on the host "
+                "(use CUDAQ_DISPATCH_PATH_HOST)\n",
+                shape);
+        return CUDAQ_ERR_UNSUPPORTED;
+      }
+      if (!unified_ctx.transport_ctx) {
+        fprintf(stderr,
+                "ERROR: cudaq_dispatcher_set_bridge (%s): the bridge's launch "
+                "override comes with no transport context\n",
+                shape);
+        return CUDAQ_ERR_INVALID_ARG;
+      }
     }
   }
 
@@ -436,10 +521,137 @@ cudaq_dispatcher_set_bridge(cudaq_dispatcher_t *dispatcher,
     dispatcher->ringbuffer = ring;
   } else if (host) {
     dispatcher->cpu_dataplane = cpu_dataplane;
-  } else {
+  } else if (unified_ctx.launch_fn) {
     dispatcher->unified_launch_fn = unified_ctx.launch_fn;
     dispatcher->transport_ctx = unified_ctx.transport_ctx;
+  } else {
+    dispatcher->gpu_dataplane = gpu_dataplane;
+    dispatcher->transport_ctx = gpu_dataplane.ctx;
   }
+  return CUDAQ_OK;
+}
+
+cudaq_status_t
+cudaq_dispatcher_set_device_code(cudaq_dispatcher_t *dispatcher,
+                                 const cudaq_device_image_t *images,
+                                 size_t count) {
+  if (!dispatcher || !images || count == 0 || dispatcher->running)
+    return CUDAQ_ERR_INVALID_ARG;
+  for (size_t i = 0; i < count; ++i)
+    if (!images[i].data || images[i].size == 0)
+      return CUDAQ_ERR_INVALID_ARG;
+  if (dispatcher->config.dispatch_path != CUDAQ_DISPATCH_PATH_DEVICE ||
+      dispatcher->config.kernel_type != CUDAQ_KERNEL_UNIFIED) {
+    fprintf(stderr, "ERROR: cudaq_dispatcher_set_device_code: only a DEVICE "
+                    "unified dispatcher links device code\n");
+    return CUDAQ_ERR_INVALID_ARG;
+  }
+  if (!dispatcher->bridge) {
+    fprintf(stderr, "ERROR: cudaq_dispatcher_set_device_code: call "
+                    "cudaq_dispatcher_set_bridge first; the transport's "
+                    "device code comes from the bridge\n");
+    return CUDAQ_ERR_INVALID_ARG;
+  }
+  if (dispatcher->unified_launch_fn) {
+    fprintf(stderr, "ERROR: cudaq_dispatcher_set_device_code: the bridge "
+                    "replaces the dispatch loop with its own kernel, which "
+                    "links no device code\n");
+    return CUDAQ_ERR_UNSUPPORTED;
+  }
+  if (dispatcher->device_library) {
+    fprintf(stderr, "ERROR: cudaq_dispatcher_set_device_code: device code "
+                    "is already linked for this dispatcher\n");
+    return CUDAQ_ERR_INVALID_ARG;
+  }
+
+  const int device_id =
+      dispatcher->config.device_id < 0 ? 0 : dispatcher->config.device_id;
+  if (cudaSetDevice(device_id) != cudaSuccess)
+    return CUDAQ_ERR_CUDA;
+
+  std::vector<cudaq::realtime::NamedDeviceImage> inputs;
+  for (size_t i = 0; i < cudaq_realtime_dispatcher_images_count; ++i)
+    inputs.push_back({cudaq_realtime_dispatcher_images[i],
+                      "dispatcher image " + std::to_string(i)});
+  const cudaq_gpu_dataplane_t &dataplane = dispatcher->gpu_dataplane;
+  for (size_t i = 0; i < dataplane.device_code_count; ++i)
+    inputs.push_back(
+        {dataplane.device_code[i], "transport image " + std::to_string(i)});
+  for (size_t i = 0; i < count; ++i)
+    inputs.push_back({images[i], "application image " + std::to_string(i)});
+
+  cudaLibrary_t library = nullptr;
+  const cudaq_status_t status =
+      cudaq::realtime::link_device_images(inputs, &library);
+  if (status != CUDAQ_OK)
+    return status;
+  cudaKernel_t kernel = nullptr;
+  if (cudaLibraryGetKernel(&kernel, library, "cudaq_unified_dispatch_kernel") !=
+      cudaSuccess) {
+    (void)cudaGetLastError();
+    fprintf(stderr, "ERROR: cudaq_dispatcher_set_device_code: the linked "
+                    "module has no cudaq_unified_dispatch_kernel\n");
+    cudaLibraryUnload(library);
+    return CUDAQ_ERR_INTERNAL;
+  }
+  dispatcher->device_library = library;
+  dispatcher->unified_kernel = kernel;
+  return CUDAQ_OK;
+}
+
+cudaq_status_t
+cudaq_dispatcher_get_device_global(cudaq_dispatcher_t *dispatcher,
+                                   const char *name, void **out_ptr,
+                                   size_t *out_size) {
+  if (!dispatcher || !name || !out_ptr)
+    return CUDAQ_ERR_INVALID_ARG;
+  if (!dispatcher->device_library) {
+    fprintf(stderr, "ERROR: cudaq_dispatcher_get_device_global: no device "
+                    "code linked; call cudaq_dispatcher_set_device_code "
+                    "first\n");
+    return CUDAQ_ERR_INVALID_ARG;
+  }
+  void *ptr = nullptr;
+  size_t size = 0;
+  if (cudaLibraryGetGlobal(&ptr, &size, dispatcher->device_library, name) !=
+      cudaSuccess) {
+    (void)cudaGetLastError();
+    fprintf(stderr,
+            "ERROR: cudaq_dispatcher_get_device_global: the linked module "
+            "has no __device__ global named '%s'\n",
+            name);
+    return CUDAQ_ERR_INVALID_ARG;
+  }
+  *out_ptr = ptr;
+  if (out_size)
+    *out_size = size;
+  return CUDAQ_OK;
+}
+
+cudaq_status_t
+cudaq_dispatcher_get_device_function(cudaq_dispatcher_t *dispatcher,
+                                     const char *name, void **out_fn) {
+  if (!dispatcher || !name || !out_fn)
+    return CUDAQ_ERR_INVALID_ARG;
+  const std::string global =
+      CUDAQ_REALTIME_DEVICE_FUNCTION_PREFIX + std::string(name);
+  void *slot = nullptr;
+  size_t size = 0;
+  cudaq_status_t status = cudaq_dispatcher_get_device_global(
+      dispatcher, global.c_str(), &slot, &size);
+  if (status != CUDAQ_OK)
+    return status;
+  void *fn = nullptr;
+  if (size != sizeof(fn) ||
+      copy_to_host(&fn, slot, sizeof(fn)) != cudaSuccess || !fn) {
+    fprintf(stderr,
+            "ERROR: cudaq_dispatcher_get_device_function: '%s' is not a "
+            "handler exported with CUDAQ_REALTIME_EXPORT_DEVICE_FUNCTION\n",
+            name);
+    return CUDAQ_ERR_INVALID_ARG;
+  }
+  dispatcher->device_functions.insert(fn);
+  *out_fn = fn;
   return CUDAQ_OK;
 }
 
@@ -453,11 +665,27 @@ cudaq_status_t cudaq_dispatcher_start(cudaq_dispatcher_t *dispatcher) {
                     "cudaq_launch_dispatch_kernel_regular\n");
     return CUDAQ_ERR_INVALID_ARG;
   }
+  const bool linked_unified =
+      dispatcher &&
+      dispatcher->config.dispatch_path != CUDAQ_DISPATCH_PATH_HOST &&
+      dispatcher->config.kernel_type == CUDAQ_KERNEL_UNIFIED &&
+      !dispatcher->unified_launch_fn;
+  if (linked_unified && dispatcher->bridge && !dispatcher->unified_kernel) {
+    fprintf(stderr, "ERROR: cudaq_dispatcher_start (DEVICE unified): no "
+                    "device code linked; call "
+                    "cudaq_dispatcher_set_device_code with the handlers\n");
+    return CUDAQ_ERR_INVALID_ARG;
+  }
   cudaq_status_t status = validate_dispatcher(dispatcher);
   if (status != CUDAQ_OK)
     return status;
   if (dispatcher->running)
     return CUDAQ_OK;
+  if (linked_unified) {
+    status = check_linked_handlers(dispatcher);
+    if (status != CUDAQ_OK)
+      return status;
+  }
   if (dispatcher->bridge) {
     status =
         cudaq_bridge_set_function_table(dispatcher->bridge, &dispatcher->table);
@@ -563,21 +791,27 @@ cudaq_status_t cudaq_dispatcher_start(cudaq_dispatcher_t *dispatcher) {
   // __constant__ indirection) -- nothing needed here.
 
   if (dispatcher->config.kernel_type == CUDAQ_KERNEL_UNIFIED) {
-    // The unified kernel lives in the consumer binary, linked from
-    // libcudaq-realtime-dispatch.a; the direct call below binds to it at load
-    // time (validate_dispatcher has checked it is there).  unified_launch_fn
-    // is an override, used only by a transport that replaces the dispatch
-    // loop outright.
+    // unified_launch_fn is an override, used only by a transport that
+    // replaces the dispatch loop outright; otherwise the kernel comes from
+    // the module set_device_code linked.
     if (dispatcher->unified_launch_fn) {
       dispatcher->unified_launch_fn(
           dispatcher->transport_ctx, dispatcher->config.slot_size,
           dispatcher->table.entries, dispatcher->table.count,
           dispatcher->shutdown_flag, dispatcher->stats, dispatcher->stream);
     } else {
-      cudaq_launch_unified_dispatch_device(
-          dispatcher->transport_ctx, dispatcher->config.slot_size,
-          dispatcher->table.entries, dispatcher->table.count,
-          dispatcher->shutdown_flag, dispatcher->stats, dispatcher->stream);
+      // Argument types must match cudaq_unified_dispatch_kernel exactly.
+      void *transport_ctx = dispatcher->transport_ctx;
+      size_t tx_stride_sz = dispatcher->config.slot_size;
+      volatile int *shutdown_flag = dispatcher->shutdown_flag;
+      cudaq_function_entry_t *function_table = dispatcher->table.entries;
+      size_t func_count = dispatcher->table.count;
+      uint64_t *stats = dispatcher->stats;
+      void *args[] = {&transport_ctx,  &tx_stride_sz, &shutdown_flag,
+                      &function_table, &func_count,   &stats};
+      (void)cudaLaunchKernel(
+          reinterpret_cast<const void *>(dispatcher->unified_kernel), dim3(1),
+          dim3(1), args, 0, dispatcher->stream);
     }
   } else {
     dispatcher->launch_fn(

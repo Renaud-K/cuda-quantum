@@ -23,15 +23,17 @@
 /// equivalent host-side loop.  The one behavioural difference is documented on
 /// `cudaq_dev_rx_poll`.
 ///
-/// LINKAGE.  These are `extern __device__` functions resolved by `nvcc -dlink`,
+/// LINKAGE.  These are `extern __device__` functions resolved at link time,
 /// NOT function pointers: a device function pointer is only valid inside the
-/// module that defines it, so the implementations must be device-linked into
-/// the same CUDA module as the kernel.  The same holds for the DEVICE_CALL
-/// handlers the kernel reaches through the function table.  In practice the
-/// transport's implementation TU and the core TU both ship in
-/// libcudaq-realtime-dispatch.a, which the consumer device-links together
-/// with its handlers.  Runtime (`dlopen`) selection of a device data plane is
-/// not expressible in CUDA.
+/// module that defines it, so the implementations must be linked into the
+/// same CUDA module as the kernel.  The same holds for the DEVICE_CALL
+/// handlers the kernel reaches through the function table.  That link happens
+/// at runtime: a transport ships its implementation as a relocatable device
+/// image in its bridge provider and returns it from get_gpu_dataplane, and
+/// cudaq_dispatcher_set_device_code links it with nvJitLink together with the
+/// kernel and the application's handler images.  The image must follow
+/// realtime/docs/device_code_contract.md; with LTO-IR in it, the hooks are
+/// inlined into the kernel.
 
 #include <cstddef>
 #include <cstdint>

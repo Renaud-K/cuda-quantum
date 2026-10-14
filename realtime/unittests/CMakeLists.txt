@@ -126,6 +126,11 @@ endif()
 # target, so they run in CI without any HSB/RDMA setup.
 add_subdirectory(bridge_interface/udp)
 
+# GPU data plane tests: a GPU but no NIC.
+if (TARGET cudaq-realtime AND CMAKE_CUDA_COMPILER)
+  add_subdirectory(bridge_interface/gpu_loopback)
+endif()
+
 # CPU RoCE bridge provider tests: self-gated on the cpu_roce provider target;
 # they skip at run time unless CUDAQ_CPU_ROCE_TEST_* name an RDMA topology.
 add_subdirectory(bridge_interface/cpu_roce)

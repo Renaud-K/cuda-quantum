@@ -24,3 +24,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/cudaq-realtime-targets.cmake")
 
 set(CUDAQ_REALTIME_INCLUDE_DIR "${PACKAGE_PREFIX_DIR}/include")
 set(CUDAQ_REALTIME_INCLUDE_DIRS "${CUDAQ_REALTIME_INCLUDE_DIR}")
+
+# cudaq_realtime_add_device_code(), for building the device images the
+# DEVICE + UNIFIED dispatcher links at runtime.
+include("${CMAKE_CURRENT_LIST_DIR}/CudaqRealtimeDeviceCode.cmake")

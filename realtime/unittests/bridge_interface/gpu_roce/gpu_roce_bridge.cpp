@@ -42,11 +42,19 @@
 //==============================================================================
 
 // The actual __device__ rpc_increment_handler lives in
-// init_rpc_increment_function_table.cu (compiled by nvcc).  We declare the
-// host-callable setup function here so this .cpp can be compiled by g++.
+// rpc_increment_handler.cuh (compiled by nvcc).  We declare the host-callable
+// setup functions here so this .cpp can be compiled by g++.  The 3-kernel
+// path takes the handler as linked into this binary; the unified path takes
+// it from the module the dispatcher links, out of the handler image below.
 
 extern "C" void
 setup_rpc_increment_function_table(cudaq_function_entry_t *d_entries);
+extern "C" void
+setup_rpc_increment_function_table_linked(cudaq_function_entry_t *d_entries,
+                                          void *device_fn);
+
+// rpc_increment_device_code.cu, embedded by cudaq_realtime_add_device_code.
+#include "rpc_increment_images.h"
 
 /// @brief Configuration for dispatch kernel setup.
 struct DispatchConfig {
@@ -250,16 +258,24 @@ int main(int argc, char *argv[]) {
       HANDLE_CUDAQ_REALTIME_ERROR(
           cudaq_dispatcher_set_bridge(dispatcher, bridge_handle));
       // The 3-kernel launcher comes from libcudaq-realtime-dispatch.a, which
-      // this binary links; the unified kernel ships with the library.
+      // this binary links; the unified kernel is linked at runtime below.
       if (!config.unified)
         HANDLE_CUDAQ_REALTIME_ERROR(cudaq_dispatcher_set_launch_fn(
             dispatcher, &cudaq_launch_dispatch_kernel_regular));
 
-      // Set up the function table with the increment handler entries
       // Populate the GPU function table with the increment handler entry
       BRIDGE_CUDA_CHECK(
           cudaMalloc(&d_function_entries, sizeof(cudaq_function_entry_t)));
-      setup_rpc_increment_function_table(d_function_entries);
+      if (config.unified) {
+        HANDLE_CUDAQ_REALTIME_ERROR(cudaq_dispatcher_set_device_code(
+            dispatcher, rpc_increment_images, rpc_increment_images_count));
+        void *handler = nullptr;
+        HANDLE_CUDAQ_REALTIME_ERROR(cudaq_dispatcher_get_device_function(
+            dispatcher, "rpc_increment_handler", &handler));
+        setup_rpc_increment_function_table_linked(d_function_entries, handler);
+      } else {
+        setup_rpc_increment_function_table(d_function_entries);
+      }
       // Create a function table struct to pass to the dispatcher
       cudaq_function_table_t table{};
       table.entries = d_function_entries;

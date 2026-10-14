@@ -84,8 +84,6 @@ int main(int argc, char *argv[]) {
           << "  --forward             Use GpuRoceTransceiver forward kernel "
              "(echo) "
              "instead of dispatch\n"
-          << "  --unified             Use unified dispatch kernel (RX + "
-             "dispatch + TX in one kernel)\n"
           << "  --cpu                 Use host dispatch with CUDA graph "
              "launch.\n";
       return 0;

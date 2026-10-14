@@ -135,8 +135,8 @@ or proprietary transports
 
 For use cases where lowest possible latency is needed, see
 [Unified Dispatch Mode](#unified-dispatch-mode) which combines all three kernels
-into one while retaining transport independence through a pluggable launch
-function.
+into one while retaining transport independence through device hooks the
+transport supplies.
 
 ## Unified Dispatch Mode
 
@@ -170,24 +170,29 @@ substitute their own receive and send primitives.
 ### Transport-Agnostic Design
 
 The unified dispatch mode is fully transport-agnostic, just like the 3-kernel
-mode.  The core dispatcher library (`libcudaq-realtime.so`) has no dependency
-on any specific transport (no `DOCA`, no `GpuRoceTransceiver`).  Unified mode introduces:
+mode.  The dispatcher owns the kernel (`cudaq_unified_dispatch_kernel`), which
+compiles with no transport headers (no `DOCA`, no `GpuRoceTransceiver`) and
+reaches the wire only through three `__device__` hooks
+(`unified_device_transport.cuh`): `attach`, `rx_poll` and `tx_publish`.
 
-- `CUDAQ_KERNEL_UNIFIED` -- a new `cudaq_kernel_type_t` enum value
-- `cudaq_unified_launch_fn_t` -- a launch function type that receives an opaque
-    `void* transport_ctx` instead of ring-buffer pointers
-- `cudaq_dispatcher_set_unified_launch()` -- wires the launch function and
-    transport context to the dispatcher
+A transport implements those hooks and serves them, as a device image, from its
+bridge's `get_gpu_dataplane` (`cudaq_gpu_dataplane_t`), together with an opaque
+device-accessible `ctx`.  For example, the `GpuRoceTransceiver`/`DOCA` provider
+packs the `DOCA` `QP` handle, memory keys and ring addresses into its context,
+and its hooks poll the completion queue, send through `BlueFlame` and re-post
+the receive `WQE`.
 
-Transport-specific details are packed into an opaque struct and passed through
-the `void* transport_ctx` pointer.  The transport provider supplies both the
-context struct and the launch function implementation.  For example, the
-`GpuRoceTransceiver`/`DOCA` transport packs `DOCA` `QP` handles, memory keys,
-and ring buffer addresses into a `doca_transport_ctx` and provides
-`gpu_roce_launch_unified_dispatch` as the launch function (compiled into
-`libcudaq-realtime-bridge-gpu-roce.so`). A different transport would define its
-own context struct and launch function; the dispatcher manages them identically
-without any transport-specific knowledge.
+CUDA resolves device calls only inside one module, so the kernel, the hooks
+and the application's DEVICE_CALL handlers must end up in the same module.
+They come from different builds -- realtime, the provider and the
+application -- so `cudaq_dispatcher_set_device_code` links them at runtime
+with nvJitLink, using device link-time optimization so the hooks are inlined
+into the kernel.  What each image must contain is in
+[device_code_contract.md](device_code_contract.md).
+
+A provider that replaces the whole loop with its own kernel can instead
+return a launch override (`cudaq_unified_launch_fn_t`) from
+`get_transport_context(UNIFIED)`; nothing is linked at runtime for it.
 
 ### When to Use Which Mode
 
@@ -201,8 +206,8 @@ without any transport-specific knowledge.
 **Unified mode** (`CUDAQ_KERNEL_UNIFIED`):
 
 - Lowest latency for regular (non-cooperative) handlers
-- Transport-agnostic API -- the transport provides a pluggable launch function
-    and opaque context (e.g., `GpuRoceTransceiver`/`DOCA` supplies `gpu_roce_launch_unified_dispatch`)
+- Transport-agnostic API -- the transport provides its device hooks and an
+    opaque context through its bridge's GPU data plane
 - Single-thread, single-block kernel -- no inter-kernel synchronization overhead
 - Not compatible with cooperative handlers or `CUDAQ_DISPATCH_GRAPH_LAUNCH`
 
@@ -215,34 +220,47 @@ typedef enum {
   CUDAQ_KERNEL_UNIFIED     = 2
 } cudaq_kernel_type_t;
 
-typedef void (*cudaq_unified_launch_fn_t)(
-    void *transport_ctx,
-    cudaq_function_entry_t *function_table, size_t func_count,
-    volatile int *shutdown_flag, uint64_t *stats,
-    cudaStream_t stream);
+// One relocatable fatbin (device_code.h).
+typedef struct {
+  const void *data;
+  size_t size;
+} cudaq_device_image_t;
 
-cudaq_status_t cudaq_dispatcher_set_unified_launch(
-    cudaq_dispatcher_t *dispatcher,
-    cudaq_unified_launch_fn_t unified_launch_fn,
-    void *transport_ctx);
+// Link the application's handler images with the dispatcher's kernel and the
+// bridge's transport image, for this dispatcher's GPU.
+cudaq_status_t cudaq_dispatcher_set_device_code(
+    cudaq_dispatcher_t *dispatcher, const cudaq_device_image_t *images,
+    size_t count);
+
+// Look things up in the linked module.
+cudaq_status_t cudaq_dispatcher_get_device_function(
+    cudaq_dispatcher_t *dispatcher, const char *name, void **out_fn);
+cudaq_status_t cudaq_dispatcher_get_device_global(
+    cudaq_dispatcher_t *dispatcher, const char *name, void **out_ptr,
+    size_t *out_size);
 ```
 
-When `kernel_type == CUDAQ_KERNEL_UNIFIED`:
+When `kernel_type == CUDAQ_KERNEL_UNIFIED` on the DEVICE path:
 
 - `cudaq_dispatcher_set_ringbuffer()` and `cudaq_dispatcher_set_launch_fn()`
     are **not required** (the unified kernel handles transport internally)
-- The transport context is wired by `cudaq_dispatcher_set_bridge()` for a
-    bridge-backed dispatcher, or by `cudaq_dispatcher_set_unified_launch()`
-    otherwise
+- The transport is wired by `cudaq_dispatcher_set_bridge()`
+- `cudaq_dispatcher_set_device_code()` must follow it, and comes before the
+    function table: the handler addresses the table holds are the ones
+    `cudaq_dispatcher_get_device_function()` returns from the linked module
+    (`cudaq_dispatcher_start()` refuses any other).  Handlers are exported with
+    `CUDAQ_REALTIME_EXPORT_DEVICE_FUNCTION`.
 - `slot_size` must give the slot stride; `cudaq_dispatcher_set_bridge()`
     fills it from the bridge when the `config` leaves it 0
-- All other wiring (`set_function_table`, `set_control`) remains the same
+- `set_control` remains the same
 
 ### Wiring Example (Unified Mode with GpuRoceTransceiver)
 
 The bridge packs its transport handles itself (for `GpuRoceTransceiver`, the
-`DOCA` `QP`, ring addresses and memory keys); the dispatcher asks for them
-through `cudaq_dispatcher_set_bridge`:
+`DOCA` `QP`, ring addresses and memory keys) and serves its device hooks; the
+dispatcher asks for both through `cudaq_dispatcher_set_bridge`.  The
+application's handlers come in as an image it built with
+`cudaq_realtime_add_device_code` (here `my_handler_images`):
 
 ```cpp
 // The provider parses its own options, including --unified
@@ -258,14 +276,28 @@ config.dispatch_mode   = CUDAQ_DISPATCH_DEVICE_CALL;
 
 cudaq_dispatcher_create(manager, &config, &dispatcher);
 cudaq_dispatcher_set_bridge(dispatcher, bridge);
+cudaq_dispatcher_set_device_code(dispatcher, my_handler_images,
+                                 my_handler_images_count);
+
+// The table is still the application's; only the address comes from the
+// linked module.
+void *handler = nullptr;
+cudaq_dispatcher_get_device_function(dispatcher, "my_handler", &handler);
+cudaq_function_entry_t entry{};
+entry.handler.device_fn_ptr = handler;
+entry.function_id = cudaq::realtime::fnv1a_hash("my_handler");
+entry.dispatch_mode = CUDAQ_DISPATCH_DEVICE_CALL;
+cudaMemcpy(d_entries, &entry, sizeof(entry), cudaMemcpyHostToDevice);
+cudaq_function_table_t table{d_entries, 1};
+
 cudaq_dispatcher_set_function_table(dispatcher, &table);
 cudaq_dispatcher_set_control(dispatcher, d_shutdown_flag, d_stats);
 cudaq_dispatcher_start(dispatcher);
 cudaq_bridge_launch(bridge);
 ```
 
-`cudaq_dispatcher_set_unified_launch` remains for dispatchers that are not
-backed by a bridge; a bridge-backed one should not call it directly.
+`cudaq_dispatcher_set_unified_launch` remains for a launch override outside a
+bridge; a bridge-backed dispatcher should not call it directly.
 
 ## What This API Does (In One Paragraph)
 
@@ -520,7 +552,7 @@ plane that shape needs:
 | HOST + REGULAR/COOPERATIVE | The `RING_BUFFER` context; `skip_tx_markers` is forced to 1 |
 | HOST + UNIFIED | The provider's CPU data plane (`rx_poll` / `tx_publish`) |
 | DEVICE + REGULAR/COOPERATIVE | The `RING_BUFFER` context; the caller still names a launcher with `cudaq_dispatcher_set_launch_fn` |
-| DEVICE + UNIFIED | The provider's unified transport context |
+| DEVICE + UNIFIED | The provider's GPU data plane, linked by `cudaq_dispatcher_set_device_code`; or its launch override |
 
 Parameters:
 
@@ -539,6 +571,23 @@ drives exactly one dispatcher.  When a bridge is attached,
 A bridge-backed dispatcher needs none of `cudaq_dispatcher_set_ringbuffer`,
 `cudaq_dispatcher_set_unified_launch` or `cudaq_dispatcher_set_cpu_dataplane`;
 those remain for dispatchers over in-process rings.
+
+**`cudaq_dispatcher_set_device_code`** (DEVICE + UNIFIED only) links the
+application's handler images with the dispatcher's unified kernel and the
+bridge's transport image into one module for the configured device, and
+loads it.  Call it after `cudaq_dispatcher_set_bridge`, once.  The images are
+read only during the call; see
+[device_code_contract.md](device_code_contract.md) for what they must contain.
+Link errors are printed with nvJitLink's own log and return
+`CUDAQ_ERR_INVALID_ARG`; a failed link leaves the dispatcher unlinked.
+
+**`cudaq_dispatcher_get_device_function`** returns the address, in the linked
+module, of a handler exported with `CUDAQ_REALTIME_EXPORT_DEVICE_FUNCTION`.
+That is the value for `handler.device_fn_ptr`.
+
+**`cudaq_dispatcher_get_device_global`** returns the device address and size
+of a `__device__` global in the linked module, so handler state can be
+initialized in the copy the kernel uses.
 
 **`cudaq_dispatcher_set_ringbuffer`** provides the RX/TX flag and data
 pointers the dispatch kernel will poll and use for request/response slots.

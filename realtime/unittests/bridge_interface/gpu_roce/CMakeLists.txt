@@ -47,6 +47,12 @@ if (TARGET rpc_increment_ft)
   target_link_libraries(gpu_roce_app PRIVATE rpc_increment_ft)
 endif()
 
+# The same handler as an image for --unified, which the dispatcher links at
+# runtime with its kernel and the plug-in's device hooks.
+cudaq_realtime_add_device_code(gpu_roce_app
+  SYMBOL rpc_increment_images
+  SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../../utils/rpc_increment_device_code.cu)
+
 # Find the `hsb_fpga_emulator` and `hsb_fpga_playback` targets built by the utils/ CMakeLists.txt, and link them to the app for easy invocation.
 if (TARGET hsb_fpga_emulator)
   add_dependencies(gpu_roce_app hsb_fpga_emulator)

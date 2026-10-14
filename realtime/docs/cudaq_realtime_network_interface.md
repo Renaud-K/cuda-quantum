@@ -49,7 +49,10 @@ cudaq_status_t cudaq_bridge_connect(cudaq_realtime_bridge_handle_t bridge);
 ### Retrieve the transport context information
 
 This context information can be either a ring buffer (for `cudaq_dispatcher_set_ringbuffer`)
-or a unified context for (`cudaq_dispatcher_set_unified_launch`).
+or a unified context: a launch override that replaces the dispatcher's unified
+kernel (for `cudaq_dispatcher_set_unified_launch`).  A transport that runs
+under the dispatcher's own unified GPU kernel serves `get_gpu_dataplane`
+instead.
 
 ```cpp
 /// @brief Retrieve the transport context for the given bridge.
@@ -126,6 +129,10 @@ typedef struct {
   cudaq_status_t (*set_function_table)(cudaq_realtime_bridge_handle_t,
                                        const cudaq_function_table_t *table);
 
+  // Version 4 field.
+  cudaq_status_t (*get_gpu_dataplane)(cudaq_realtime_bridge_handle_t,
+                                      cudaq_gpu_dataplane_t *out);
+
 } cudaq_realtime_bridge_interface_t;
 ```
 
@@ -149,6 +156,16 @@ A provider that does not implement an optional capability sets that entry to
 for pre-staging. A transport that does not need the table simply leaves
 the entry `NULL`, and the call then returns `CUDAQ_OK` instead of
 dispatching into the provider.  
+
+`get_gpu_dataplane` (version 4) serves the unified GPU dispatcher: the
+provider's implementation of the device hooks in `unified_device_transport.cuh`,
+as relocatable device images, plus the device-accessible context they run on.
+The dispatcher links those images at runtime with its kernel and the
+application's handlers, so they must follow
+[device_code_contract.md](device_code_contract.md);
+`cudaq_realtime_add_device_code` builds and embeds them for a CMake provider.
+A provider whose unified loop runs on the host, or that has none, leaves it
+`NULL`.
 
 At runtime, when a `CUDAQ_PROVIDER_EXTERNAL` is requested in `cudaq_bridge_create`,
 CUDA-Q will retrieve the environment variable `CUDAQ_REALTIME_BRIDGE_LIB`
@@ -265,6 +282,7 @@ cudaq_realtime_bridge_interface_t *cudaq_realtime_get_bridge_interface() {
       /*get_endpoint_info=*/nullptr,
       /*get_ring_geometry=*/nullptr,
       /*set_function_table=*/nullptr,
+      /*get_gpu_dataplane=*/nullptr,
   };
   return &cudaq_provider_name_bridge_interface;
 }

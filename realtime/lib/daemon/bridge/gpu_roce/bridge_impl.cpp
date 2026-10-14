@@ -14,39 +14,12 @@
 #include <sstream>
 
 #include "cudaq/realtime/daemon/bridge/bridge_interface.h"
+#include "cudaq/realtime/daemon/bridge/gpu_roce/gpu_roce_doca_transport_ctx.h"
 #include "cudaq/realtime/daemon/bridge/gpu_roce/gpu_roce_wrapper.h"
 #include "cudaq/realtime/gpu_roce_bridge_common.h"
-
-// Stage a host-filled transport context in device memory; see the
-// declarations in gpu_roce_bridge_common.h.  Host-only (no device code), so
-// they live here rather than alongside the device hooks -- that keeps this
-// shared library clear of the unified dispatch archive.
-extern "C" int
-gpu_roce_unified_ctx_to_device(const gpu_roce_doca_transport_ctx *host_ctx,
-                               void **out_device_ctx) {
-  if (host_ctx == nullptr || out_device_ctx == nullptr)
-    return cudaErrorInvalidValue;
-
-  void *device_ctx = nullptr;
-  cudaError_t err = cudaMalloc(&device_ctx, sizeof(*host_ctx));
-  if (err != cudaSuccess)
-    return err;
-
-  err = cudaMemcpy(device_ctx, host_ctx, sizeof(*host_ctx),
-                   cudaMemcpyHostToDevice);
-  if (err != cudaSuccess) {
-    cudaFree(device_ctx);
-    return err;
-  }
-
-  *out_device_ctx = device_ctx;
-  return cudaSuccess;
-}
-
-extern "C" void gpu_roce_unified_ctx_free(void *device_ctx) {
-  if (device_ctx != nullptr)
-    cudaFree(device_ctx);
-}
+// The device hooks of gpu_roce_unified_transport.cu, embedded by
+// cudaq_realtime_add_device_code.
+#include "gpu_roce_transport_images.h"
 
 namespace {
 #define HANDLE_CUDA_ERROR(x)                                                   \
@@ -66,8 +39,8 @@ struct GpuRoceBridgeContext {
   std::unique_ptr<std::thread> gpu_roce_thread;
   bool is_igpu = false;
   /// Device copy of the unified transport context, which is what the dispatch
-  /// kernel's hooks read.  Staged on the first get_transport_context(UNIFIED)
-  /// and released in destroy.
+  /// kernel's hooks read.  Staged on the first get_gpu_dataplane and released
+  /// in destroy.
   void *device_transport_ctx = nullptr;
   GpuRoceBridgeContext(const cudaq::realtime::BridgeConfig &cfg) : config(cfg) {
     //============================================================================
@@ -110,6 +83,43 @@ struct GpuRoceBridgeContext {
     );
   }
 };
+
+/// Stage the context the device hooks read in device memory, once per bridge
+/// instance; freed in destroy.
+cudaq_status_t stage_device_transport_ctx(GpuRoceBridgeContext &ctx) {
+  if (ctx.device_transport_ctx)
+    return CUDAQ_OK;
+  auto &transceiver = ctx.transceiver;
+  gpu_roce_doca_transport_ctx doca_ctx{};
+  doca_ctx.gpu_dev_qp = gpu_roce_get_gpu_dev_qp(transceiver);
+  doca_ctx.rx_ring_data =
+      reinterpret_cast<uint8_t *>(gpu_roce_get_rx_ring_data_addr(transceiver));
+  doca_ctx.rx_ring_stride_sz = gpu_roce_get_page_size(transceiver);
+  doca_ctx.rx_ring_stride_num = gpu_roce_get_num_pages(transceiver);
+  doca_ctx.tx_ring_data =
+      reinterpret_cast<uint8_t *>(gpu_roce_get_tx_ring_data_addr(transceiver));
+  doca_ctx.tx_ring_stride_sz = gpu_roce_get_page_size(transceiver);
+  doca_ctx.tx_ring_mkey = htonl(gpu_roce_get_tx_ring_lkey(transceiver));
+  doca_ctx.frame_size = ctx.config.frame_size;
+  doca_ctx.use_bf = ctx.is_igpu ? 0 : 1;
+
+  void *device_ctx = nullptr;
+  cudaError_t err = cudaMalloc(&device_ctx, sizeof(doca_ctx));
+  if (err == cudaSuccess) {
+    err = cudaMemcpy(device_ctx, &doca_ctx, sizeof(doca_ctx),
+                     cudaMemcpyHostToDevice);
+    if (err != cudaSuccess)
+      cudaFree(device_ctx);
+  }
+  if (err != cudaSuccess) {
+    std::cerr << "ERROR: Failed to stage the unified transport context on "
+                 "the device: "
+              << cudaGetErrorString(err) << std::endl;
+    return CUDAQ_ERR_INTERNAL;
+  }
+  ctx.device_transport_ctx = device_ctx;
+  return CUDAQ_OK;
+}
 } // namespace
 
 extern "C" {
@@ -177,7 +187,8 @@ gpu_roce_bridge_destroy(cudaq_realtime_bridge_handle_t handle) {
   if (ctx->transceiver) {
     gpu_roce_destroy_transceiver(ctx->transceiver);
   }
-  gpu_roce_unified_ctx_free(ctx->device_transport_ctx);
+  if (ctx->device_transport_ctx)
+    cudaFree(ctx->device_transport_ctx);
   delete ctx;
   return CUDAQ_OK;
 }
@@ -192,17 +203,14 @@ static cudaq_status_t gpu_roce_bridge_get_transport_context(
   if (!ctx->transceiver)
     return CUDAQ_ERR_INTERNAL;
 
-  // This provider implements both shapes, and create() has already committed
-  // to one of them: config.unified decides whether the transceiver was built
-  // with the 3-kernel path (use_3kernel above) and whether launch() starts a
-  // monitor thread.  So report only the configured shape, per the contract on
-  // cudaq_bridge_get_transport_context.  Describing the other one on request
-  // was worse than useless: a consumer that selected unified but forgot this
-  // bridge's --unified could take the launch_fn anyway, then watch launch()
-  // start the 3-kernel monitor underneath its unified dispatcher.  Refusing
-  // makes that a wiring error at the consumer instead.
-  if (context_type == UNIFIED && !ctx->config.unified)
+  // The unified shape is served by get_gpu_dataplane: this provider supplies
+  // the dispatcher's kernel with device hooks, not a loop of its own.
+  if (context_type == UNIFIED)
     return CUDAQ_ERR_UNSUPPORTED;
+  // create() has already committed to one shape: config.unified decides
+  // whether the transceiver was built with the 3-kernel path (use_3kernel
+  // above) and whether launch() starts a monitor thread.  A ring consumer of
+  // a --unified bridge would see the 3-kernel rings never fill, so refuse.
   if (context_type == RING_BUFFER && ctx->config.unified)
     return CUDAQ_ERR_UNSUPPORTED;
 
@@ -230,43 +238,6 @@ static cudaq_status_t gpu_roce_bridge_get_transport_context(
     ringbuffer->tx_data = tx_ring_data;
     ringbuffer->rx_stride_sz = ctx->config.page_size;
     ringbuffer->tx_stride_sz = ctx->config.page_size;
-  } else if (context_type == UNIFIED) {
-    cudaq_unified_dispatch_ctx_t *dispatch_ctx =
-        reinterpret_cast<cudaq_unified_dispatch_ctx_t *>(out_context);
-
-    // Staged once and retained for the dispatcher's lifetime.  Held per
-    // bridge instance -- a function-local static used to leave every instance
-    // in the process sharing one context.
-    if (!ctx->device_transport_ctx) {
-      gpu_roce_doca_transport_ctx doca_ctx{};
-      doca_ctx.gpu_dev_qp = gpu_roce_get_gpu_dev_qp(transceiver);
-      doca_ctx.rx_ring_data = reinterpret_cast<uint8_t *>(
-          gpu_roce_get_rx_ring_data_addr(transceiver));
-      doca_ctx.rx_ring_stride_sz = gpu_roce_get_page_size(transceiver);
-      doca_ctx.rx_ring_stride_num = gpu_roce_get_num_pages(transceiver);
-      doca_ctx.tx_ring_data = reinterpret_cast<uint8_t *>(
-          gpu_roce_get_tx_ring_data_addr(transceiver));
-      doca_ctx.tx_ring_stride_sz = gpu_roce_get_page_size(transceiver);
-      doca_ctx.tx_ring_mkey = htonl(gpu_roce_get_tx_ring_lkey(transceiver));
-      doca_ctx.frame_size = ctx->config.frame_size;
-      doca_ctx.use_bf = ctx->is_igpu ? 0 : 1;
-
-      // The kernel's hooks read the context on the GPU; freed in destroy.
-      const int err =
-          gpu_roce_unified_ctx_to_device(&doca_ctx, &ctx->device_transport_ctx);
-      if (err != cudaSuccess) {
-        std::cerr << "ERROR: Failed to stage the unified transport context on "
-                     "the device: "
-                  << cudaGetErrorString(static_cast<cudaError_t>(err))
-                  << std::endl;
-        return CUDAQ_ERR_INTERNAL;
-      }
-    }
-
-    // No launch override: this transport implements the device data plane, so
-    // the dispatcher runs the unified kernel from the dispatch archive over it.
-    dispatch_ctx->launch_fn = nullptr;
-    dispatch_ctx->transport_ctx = ctx->device_transport_ctx;
   } else {
     std::cerr << "ERROR: Invalid transport context type" << std::endl;
     return CUDAQ_ERR_INVALID_ARG;
@@ -385,6 +356,27 @@ gpu_roce_bridge_get_ring_geometry(cudaq_realtime_bridge_handle_t handle,
   return CUDAQ_OK;
 }
 
+static cudaq_status_t
+gpu_roce_bridge_get_gpu_dataplane(cudaq_realtime_bridge_handle_t handle,
+                                  cudaq_gpu_dataplane_t *out) {
+  if (!handle || !out)
+    return CUDAQ_ERR_INVALID_ARG;
+  auto *ctx = reinterpret_cast<GpuRoceBridgeContext *>(handle);
+  if (!ctx->transceiver)
+    return CUDAQ_ERR_INTERNAL;
+  // Without --unified, create() built the 3-kernel transceiver, whose rings
+  // the hooks would never see filled.
+  if (!ctx->config.unified)
+    return CUDAQ_ERR_UNSUPPORTED;
+  const cudaq_status_t status = stage_device_transport_ctx(*ctx);
+  if (status != CUDAQ_OK)
+    return status;
+  out->ctx = ctx->device_transport_ctx;
+  out->device_code = gpu_roce_transport_images;
+  out->device_code_count = gpu_roce_transport_images_count;
+  return CUDAQ_OK;
+}
+
 cudaq_realtime_bridge_interface_t *cudaq_realtime_get_bridge_interface() {
   static cudaq_realtime_bridge_interface_t cudaq_gpu_roce_bridge_interface = {
       CUDAQ_REALTIME_BRIDGE_INTERFACE_VERSION,
@@ -398,6 +390,7 @@ cudaq_realtime_bridge_interface_t *cudaq_realtime_get_bridge_interface() {
       gpu_roce_bridge_get_endpoint_info,
       gpu_roce_bridge_get_ring_geometry,
       /*set_function_table=*/nullptr, // no function table needed
+      gpu_roce_bridge_get_gpu_dataplane,
   };
   return &cudaq_gpu_roce_bridge_interface;
 }

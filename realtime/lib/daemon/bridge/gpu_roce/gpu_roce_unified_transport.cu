@@ -13,8 +13,11 @@
 /// This is the only TU in the unified path that sees DOCA.  The kernel itself
 /// lives in dispatcher/unified_dispatch_kernel.cu, compiled without any DOCA
 /// or HSB include path; it reaches the wire exclusively through the three
-/// hooks below.  Both ship in libcudaq-realtime-dispatch.a and are
-/// device-linked into the consumer, together with its handlers.
+/// hooks below.  This TU is embedded in the gpu_roce plug-in as a relocatable
+/// device image and handed to the dispatcher through get_gpu_dataplane, which
+/// links it at runtime with the kernel and the application's handlers.  It
+/// must therefore follow realtime/docs/device_code_contract.md: helpers
+/// private, no host-initialized module globals, no device runtime.
 ///
 /// Two TX paths selected at runtime via the use_bf flag:
 ///   dGPU: send_bf (BlueFlame, shared-memory WQE) -- lowest latency.

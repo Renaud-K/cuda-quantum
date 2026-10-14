@@ -58,6 +58,7 @@ set(CUDAQ_REALTIME_INCLUDE_DIR ${CUDAQ_REALTIME_SOURCE_DIR}/include)
 
 # Add cmake directory to module path for custom Find modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(CudaqRealtimeDeviceCode)
 
 # Options
 # ==============================================================================
@@ -187,6 +188,8 @@ install(EXPORT cudaq-realtime-targets
 
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/cmake/cudaq-realtime-config.cmake
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CudaqRealtimeDeviceCode.cmake
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CudaqRealtimeEmbedDeviceCode.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cudaq-realtime
   COMPONENT Development)
 
