@@ -62,7 +62,9 @@
 /// places, each a branch of a numbered step below: the dispatcher config [3],
 /// the function table [5], and the control variables [6], which the GPU must
 /// be able to read.  All device function-table construction is in
-/// build_device_table().
+/// build_device_table().  The dispatch kernels come from
+/// libcudaq-realtime-dispatch.a, device-linked into this binary with the
+/// handler, and the dispatcher finds their launchers there by itself.
 ///
 /// ORDERING RULE: the READY line is printed BEFORE cudaq_bridge_connect().
 /// A rendezvous transport blocks in connect() until the caller dials in, while
@@ -380,16 +382,6 @@ int main(int argc, char **argv) {
     std::cerr << "ERROR: cudaq_dispatcher_create failed" << std::endl;
     return 1;
   }
-#ifdef CUDAQ_REALTIME_TEST_SERVER_DEVICE_PATH
-  // The 3-kernel launcher lives in libcudaq-realtime-dispatch.a, linked into
-  // this binary; the dispatcher has no default for it.
-  if (cfg.device && !cfg.unified &&
-      cudaq_dispatcher_set_launch_fn(
-          res.dispatcher, &cudaq_launch_dispatch_kernel_regular) != CUDAQ_OK) {
-    std::cerr << "ERROR: cudaq_dispatcher_set_launch_fn failed" << std::endl;
-    return 1;
-  }
-#endif
 
   // [4] Wire the transport to the dispatcher.  The dispatcher asks the bridge
   //     for the data plane the shape needs -- a ring it polls, or the two hooks

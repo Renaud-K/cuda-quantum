@@ -155,7 +155,7 @@ struct BridgeConfig {
   uint32_t threads_per_block = 32;
 
   /// @brief Pointer to the dispatch kernel launch function.
-  /// Default: cudaq_launch_dispatch_kernel_regular
+  /// Default (nullptr): the dispatcher's own, for `kernel_type`.
   cudaq_dispatch_launch_fn_t launch_fn = nullptr;
 
   // Set this to CUDAQ_DISPATCH_PATH_HOST for the HOST_LOOP graph launch mode --
@@ -565,11 +565,8 @@ inline int bridge_run(BridgeConfig &config) {
         return 1;
       }
 
-      cudaq_dispatch_launch_fn_t launch_fn = config.launch_fn;
-      if (!launch_fn) {
-        launch_fn = &cudaq_launch_dispatch_kernel_regular;
-      }
-      if (cudaq_dispatcher_set_launch_fn(dispatcher, launch_fn) != CUDAQ_OK) {
+      if (config.launch_fn && cudaq_dispatcher_set_launch_fn(
+                                  dispatcher, config.launch_fn) != CUDAQ_OK) {
         std::cerr << "ERROR: Failed to set launch function" << std::endl;
         return 1;
       }
