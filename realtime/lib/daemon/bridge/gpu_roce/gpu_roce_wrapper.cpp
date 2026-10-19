@@ -29,6 +29,8 @@
 #include <doca_error.h>
 #include <endian.h>
 #include <iostream>
+#include <string>
+#include <type_traits>
 
 extern "C" cudaError_t GpuRoceTransceiverQueryOccupancy(int *, int *, int *);
 extern "C" doca_error_t GpuRoceTransceiverPrepareKernel(
@@ -36,6 +38,54 @@ extern "C" doca_error_t GpuRoceTransceiverPrepareKernel(
     uint32_t cu_page_mkey, uint32_t cuda_blocks, uint32_t cuda_threads);
 
 using namespace hololink::operators;
+
+//==============================================================================
+// HSB API compatibility
+//==============================================================================
+
+// From HSB EA_CUDAQ_10_26 on, GpuRoceTransceiver drives several QPs: every
+// getter takes a sensor id, and the constructor takes the TX QPs as a
+// comma-separated string. HSB's VERSION reads 2.7.0 on both sides of that
+// change, so the API is detected instead. The checks are on a template
+// parameter so that the call the other API lacks is discarded, not compiled.
+// The bridge drives a single QP, sensor 0.
+namespace {
+constexpr unsigned kSensorId = 0;
+
+template <typename T>
+concept MultiQpTransceiver = requires(T &t) { t.get_rkey(kSensorId); };
+
+template <typename T, typename... Args>
+std::unique_ptr<T> make_transceiver(const char *device_name, unsigned ib_port,
+                                    unsigned tx_ibv_qp, Args &&...args) {
+  if constexpr (std::is_constructible_v<T, const char *, unsigned, std::string,
+                                        Args...>)
+    return std::make_unique<T>(device_name, ib_port, std::to_string(tx_ibv_qp),
+                               std::forward<Args>(args)...);
+  else
+    return std::make_unique<T>(device_name, ib_port, tx_ibv_qp,
+                               std::forward<Args>(args)...);
+}
+
+#define CUDAQ_HSB_SENSOR_GETTER(getter)                                        \
+  template <typename T>                                                        \
+  auto hsb_##getter(T &t) {                                                    \
+    if constexpr (MultiQpTransceiver<T>)                                       \
+      return t.getter(kSensorId);                                              \
+    else                                                                       \
+      return t.getter();                                                       \
+  }
+CUDAQ_HSB_SENSOR_GETTER(get_qp_number)
+CUDAQ_HSB_SENSOR_GETTER(get_rkey)
+CUDAQ_HSB_SENSOR_GETTER(get_tx_ring_lkey)
+CUDAQ_HSB_SENSOR_GETTER(get_rx_ring_data_addr)
+CUDAQ_HSB_SENSOR_GETTER(get_rx_ring_flag_addr)
+CUDAQ_HSB_SENSOR_GETTER(get_rx_ring_stride_sz)
+CUDAQ_HSB_SENSOR_GETTER(get_rx_ring_stride_num)
+CUDAQ_HSB_SENSOR_GETTER(get_tx_ring_data_addr)
+CUDAQ_HSB_SENSOR_GETTER(get_tx_ring_flag_addr)
+#undef CUDAQ_HSB_SENSOR_GETTER
+} // namespace
 
 //==============================================================================
 // Internal implementation struct
@@ -55,10 +105,10 @@ gpu_roce_transceiver_t gpu_roce_create_transceiver(
     const char *peer_ip, int forward, int rx_only, int tx_only) {
   try {
     auto *impl = new GpuRoceTransceiverImpl();
-    impl->transceiver = std::make_unique<GpuRoceTransceiver>(
-        device_name, static_cast<unsigned>(ib_port), tx_ibv_qp, gpu_id,
-        frame_size, page_size, num_pages, peer_ip, forward != 0, rx_only != 0,
-        tx_only != 0);
+    impl->transceiver = make_transceiver<GpuRoceTransceiver>(
+        device_name, static_cast<unsigned>(ib_port), tx_ibv_qp,
+        static_cast<uint32_t>(gpu_id), frame_size, page_size, num_pages,
+        peer_ip, forward != 0, rx_only != 0, tx_only != 0);
     return reinterpret_cast<gpu_roce_transceiver_t>(impl);
   } catch (const std::exception &e) {
     std::cerr << "ERROR: Failed to create GpuRoceTransceiver: " << e.what()
@@ -114,7 +164,7 @@ void gpu_roce_set_cpu_ring_buffers(gpu_roce_transceiver_t handle, int enable) {
 uint32_t gpu_roce_get_qp_number(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_qp_number();
+    return hsb_get_qp_number(*impl->transceiver);
   }
   return 0;
 }
@@ -122,7 +172,7 @@ uint32_t gpu_roce_get_qp_number(gpu_roce_transceiver_t handle) {
 uint32_t gpu_roce_get_rkey(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_rkey();
+    return hsb_get_rkey(*impl->transceiver);
   }
   return 0;
 }
@@ -130,7 +180,7 @@ uint32_t gpu_roce_get_rkey(gpu_roce_transceiver_t handle) {
 uint32_t gpu_roce_get_tx_ring_lkey(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_tx_ring_lkey();
+    return hsb_get_tx_ring_lkey(*impl->transceiver);
   }
   return 0;
 }
@@ -158,7 +208,7 @@ void *gpu_roce_get_gpu_dev_qp(gpu_roce_transceiver_t handle) {
 void *gpu_roce_get_rx_ring_data_addr(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_rx_ring_data_addr();
+    return hsb_get_rx_ring_data_addr(*impl->transceiver);
   }
   return nullptr;
 }
@@ -166,7 +216,7 @@ void *gpu_roce_get_rx_ring_data_addr(gpu_roce_transceiver_t handle) {
 uint64_t *gpu_roce_get_rx_ring_flag_addr(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_rx_ring_flag_addr();
+    return hsb_get_rx_ring_flag_addr(*impl->transceiver);
   }
   return nullptr;
 }
@@ -174,7 +224,7 @@ uint64_t *gpu_roce_get_rx_ring_flag_addr(gpu_roce_transceiver_t handle) {
 void *gpu_roce_get_tx_ring_data_addr(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_tx_ring_data_addr();
+    return hsb_get_tx_ring_data_addr(*impl->transceiver);
   }
   return nullptr;
 }
@@ -182,7 +232,7 @@ void *gpu_roce_get_tx_ring_data_addr(gpu_roce_transceiver_t handle) {
 uint64_t *gpu_roce_get_tx_ring_flag_addr(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_tx_ring_flag_addr();
+    return hsb_get_tx_ring_flag_addr(*impl->transceiver);
   }
   return nullptr;
 }
@@ -204,7 +254,7 @@ bool gpu_roce_query_kernel_occupancy(void) {
 size_t gpu_roce_get_page_size(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_rx_ring_stride_sz();
+    return hsb_get_rx_ring_stride_sz(*impl->transceiver);
   }
   return 0;
 }
@@ -212,7 +262,7 @@ size_t gpu_roce_get_page_size(gpu_roce_transceiver_t handle) {
 unsigned gpu_roce_get_num_pages(gpu_roce_transceiver_t handle) {
   if (handle) {
     auto *impl = reinterpret_cast<GpuRoceTransceiverImpl *>(handle);
-    return impl->transceiver->get_rx_ring_stride_num();
+    return hsb_get_rx_ring_stride_num(*impl->transceiver);
   }
   return 0;
 }
@@ -226,7 +276,7 @@ int gpu_roce_prepare_receive_send(gpu_roce_transceiver_t handle,
       impl->transceiver->get_doca_gpu_dev_qp(0));
   if (!qp)
     return 0;
-  uint32_t mkey = htobe32(impl->transceiver->get_tx_ring_lkey());
+  uint32_t mkey = htobe32(hsb_get_tx_ring_lkey(*impl->transceiver));
   doca_error_t err =
       GpuRoceTransceiverPrepareKernel(0, qp, frame_size, mkey, 1, 64);
   if (err != DOCA_SUCCESS) {

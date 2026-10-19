@@ -134,21 +134,25 @@ cudaq_realtime_add_doca_repo() {
       retry apt-get update
       retry apt-get install -y --no-install-recommends curl gnupg
     fi
-    curl https://linux.mellanox.com/public/repo/doca/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
+    # Up to 3.3.0 the apt metadata is signed with the Mellanox key, from 3.4.0
+    # on with the NVIDIA DOCA Host key, so the keyring holds both.
+    { curl -fsSL https://linux.mellanox.com/public/repo/doca/public_keys/nvidia-doca-rpm-gpg-public-key.asc &&
+      curl -fsSL https://linux.mellanox.com/public/repo/doca/GPG-KEY-Mellanox.pub; } |
+      gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub
     echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list
     retry apt-get update
   elif [ -x "$(command -v dnf)" ]; then
     # dnf fetches the keys itself, so nothing has to be installed to set this
     # up. The RPMs were re-signed in January 2026 with the NVIDIA DOCA Host
-    # key, but the repository directories still serve the superseded Mellanox
-    # key.
+    # key, which is the only one dnf needs; from 3.4.0 on the repository
+    # directories no longer serve the superseded Mellanox key at all.
     cat > /etc/yum.repos.d/doca.repo <<EOF
 [doca]
 name=NVIDIA DOCA $DOCA_VERSION
 baseurl=$DOCA_URL
 enabled=1
 gpgcheck=1
-gpgkey=https://linux.mellanox.com/public/repo/doca/public_keys/nvidia-doca-rpm-gpg-public-key.asc ${DOCA_URL}GPG-KEY-Mellanox.pub
+gpgkey=https://linux.mellanox.com/public/repo/doca/public_keys/nvidia-doca-rpm-gpg-public-key.asc
 EOF
     retry dnf -y makecache
   else
@@ -205,10 +209,10 @@ cudaq_realtime_verify_sdks() {
 }
 
 # Apply the patches in CUDAQ_REALTIME_HSB_PATCH_DIR to the HSB tree at
-# $HSB_ROOT, in name order. Any patch that does not apply fails the build rather
-# than leaving HSB silently unpatched -- including one the tree already
-# contains, which is reported as such: it means the pinned ref has caught up
-# and the patch must be deleted, not carried forward.
+# $HSB_ROOT, in name order. A patch the tree already contains fails the build:
+# it means the pinned ref has caught up and the patch must be deleted, not
+# carried forward. Any other patch that does not apply is skipped with a
+# warning, so that HSB refs the patches were not written for still build.
 cudaq_realtime_patch_hsb() {
   if [ -z "$CUDAQ_REALTIME_HSB_PATCH_DIR" ]; then
     echo "CUDAQ_REALTIME_HSB_PATCH_DIR is empty, building HSB unpatched."
@@ -228,8 +232,7 @@ cudaq_realtime_patch_hsb() {
       echo "ERROR: HSB $CUDAQ_REALTIME_HSB_REF already contains $(basename "$patch"); delete it from $CUDAQ_REALTIME_HSB_PATCH_DIR" >&2
       return 1
     else
-      echo "ERROR: HSB patch $(basename "$patch") does not apply to $CUDAQ_REALTIME_HSB_REF" >&2
-      return 1
+      echo "WARNING: HSB patch $(basename "$patch") does not apply to $CUDAQ_REALTIME_HSB_REF; skipping it" >&2
     fi
   done
 }
