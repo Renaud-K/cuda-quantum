@@ -182,14 +182,31 @@ find_interface(cudaq_realtime_bridge_handle_t bridge, const char *what) {
 }
 } // namespace
 
+// Deprecated shim.  The ring shape is the new entry's business; UNIFIED still
+// reaches a provider that implements the old entry (a launch override), and
+// is refused for every other provider.  Both wrappers call the provider's
+// entries directly, never each other.
 cudaq_status_t cudaq_bridge_get_transport_context(
     cudaq_realtime_bridge_handle_t bridge,
     cudaq_realtime_transport_context_t context_type, void *out_context) {
   auto *bridge_interface = find_interface(bridge, "get_transport_context");
   if (!bridge_interface)
     return CUDAQ_ERR_INVALID_ARG;
-  return bridge_interface->get_transport_context(bridge, context_type,
-                                                 out_context);
+  if (!out_context)
+    return CUDAQ_ERR_INVALID_ARG;
+  if (context_type == RING_BUFFER) {
+    auto *ring = static_cast<cudaq_ringbuffer_t *>(out_context);
+    if (bridge_interface->get_ring_buffer)
+      return bridge_interface->get_ring_buffer(bridge, ring);
+    if (bridge_interface->get_transport_context)
+      return bridge_interface->get_transport_context(bridge, RING_BUFFER, ring);
+    return CUDAQ_ERR_UNSUPPORTED;
+  }
+  if (context_type != UNIFIED)
+    return CUDAQ_ERR_INVALID_ARG;
+  if (!bridge_interface->get_transport_context)
+    return CUDAQ_ERR_UNSUPPORTED;
+  return bridge_interface->get_transport_context(bridge, UNIFIED, out_context);
 }
 
 cudaq_status_t cudaq_bridge_connect(cudaq_realtime_bridge_handle_t bridge) {
@@ -255,6 +272,24 @@ cudaq_bridge_get_ring_geometry(cudaq_realtime_bridge_handle_t bridge,
 }
 
 cudaq_status_t
+cudaq_bridge_get_ring_buffer(cudaq_realtime_bridge_handle_t bridge,
+                             cudaq_ringbuffer_t *out_ring) {
+  if (!out_ring)
+    return CUDAQ_ERR_INVALID_ARG;
+  auto *bridge_interface = find_interface(bridge, "get_ring_buffer");
+  if (!bridge_interface)
+    return CUDAQ_ERR_INVALID_ARG;
+  if (bridge_interface->get_ring_buffer)
+    return bridge_interface->get_ring_buffer(bridge, out_ring);
+  // A provider written before version 5 answers the ring shape through the
+  // deprecated entry.
+  if (bridge_interface->get_transport_context)
+    return bridge_interface->get_transport_context(bridge, RING_BUFFER,
+                                                   out_ring);
+  return CUDAQ_ERR_UNSUPPORTED;
+}
+
+cudaq_status_t
 cudaq_bridge_set_function_table(cudaq_realtime_bridge_handle_t bridge,
                                 const cudaq_function_table_t *table) {
   if (!table || !table->entries || table->count == 0)
@@ -265,4 +300,17 @@ cudaq_bridge_set_function_table(cudaq_realtime_bridge_handle_t bridge,
   if (!bridge_interface->set_function_table)
     return CUDAQ_OK;
   return bridge_interface->set_function_table(bridge, table);
+}
+
+cudaq_status_t
+cudaq_bridge_get_gpu_dataplane(cudaq_realtime_bridge_handle_t bridge,
+                               cudaq_gpu_dataplane_t *out_dataplane) {
+  if (!out_dataplane)
+    return CUDAQ_ERR_INVALID_ARG;
+  auto *bridge_interface = find_interface(bridge, "get_gpu_dataplane");
+  if (!bridge_interface)
+    return CUDAQ_ERR_INVALID_ARG;
+  if (!bridge_interface->get_gpu_dataplane)
+    return CUDAQ_ERR_UNSUPPORTED;
+  return bridge_interface->get_gpu_dataplane(bridge, out_dataplane);
 }

@@ -24,8 +24,9 @@ assumptions behind each one.
 
 In this preview, you can start from a CUDA-Q kernel or author a portable logical
 program directly; configure codes, gadgets, placement, and distillation
-protocols; generate resource estimates; and emit realized programs for
-simulation and further analysis in tools such as Stim.
+protocols; generate resource estimates; execute supported physical builds with
+`cudaq.run`; and emit realized programs for simulation and further analysis in
+tools such as Stim.
 
 ## Installation
 
@@ -74,7 +75,7 @@ Start from the result you want:
 | If you want to…                                                            | Go to                                                                         |
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | **Install and run a first estimate**                                       | [Getting started](getting-started/quickstart.md)                              |
-| **Build, place, and estimate a logical program**                           | [The logical programming stack](getting-started/cudaq-logical-in-practice.md) |
+| **Compile, place, estimate, and run a CUDA-Q kernel**                      | [The logical programming stack](getting-started/cudaq-logical-in-practice.md) |
 | **Do a specific job** (define a code, place, distill, estimate, emit Stim) | [Use cases](use-cases/define-a-code.md)                                       |
 | **Browse runnable end-to-end examples**                                    | [Examples](use-cases/examples/index.md)                                       |
 | **Inspect advanced internals or build against CUDA-Q**                     | [Reference](reference/architecture.md)                                        |
@@ -102,6 +103,7 @@ use-cases/magic-states-and-protocols
 use-cases/logical-synthesis
 use-cases/estimation
 use-cases/stim-emission
+use-cases/gadget-edems
 ```
 
 ```{toctree}
@@ -109,6 +111,7 @@ use-cases/stim-emission
 :hidden:
 :caption: Reference
 
+reference/detector-contracts
 reference/for-stim-users
 reference/capabilities
 reference/architecture
