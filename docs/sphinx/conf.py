@@ -58,6 +58,7 @@ extensions = [
     'sphinx_tags',
     'enum_tools.autoenum',  # for pretty-print Python enums
     'myst_parser',  # for including markdown files
+    'sphinxcontrib.mermaid',  # for Mermaid diagrams in markdown files
     'sphinx_inline_tabs',  # showing code blocks in multiple languages
     'nbsphinx',  # for supporting jupyter notebooks
     'sphinx_copybutton',  # allows for copy/paste of code cells
@@ -315,3 +316,5 @@ napoleon_numpy_docstring = False
 autosectionlabel_prefix_document = True
 autosectionlabel_maxdepth = 2
 copybutton_copy_empty_lines = False
+# The version the realtime diagrams were checked against; loaded from a CDN.
+mermaid_version = "11.17.2"
